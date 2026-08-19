@@ -299,18 +299,18 @@
     const TOOL_DECLARATIONS = [
       {
         name: "advanced_book_search",
-        description: "Precise multi-criteria search for books. Use whenever a user asks about books, inventory, prices, publication years, genres, or stock levels.",
+        description: "Precise multi-criteria search for books. Use when user needs filtering by multiple criteria like genre, price range, year, or stock status. For simple title/author searches, use search_books instead.",
         parameters: {
           type: "OBJECT",
           properties: {
-            query: { type: "STRING", description: "Keywords related to title, author, or general keywords." },
+            query: { type: "STRING", description: "Title or author keywords ONLY. Do NOT include genre names, stock status, or other structured filters here." },
             max_price: { type: "NUMBER", description: "Maximum price limit." },
             min_price: { type: "NUMBER", description: "Minimum price limit." },
-            genre: { type: "STRING", description: "Specific genre filter." },
+            genre: { type: "STRING", description: "Exact genre name from available genres. Must match one of: Literary Fiction, Historical Fiction, Fantasy, Mystery / Thriller, Cookbook, Nature & Science, Poetry, Thriller, Children's / YA, Philosophy & Self-Help" },
             published_year: { type: "NUMBER", description: "Exact publication year." },
             published_before: { type: "NUMBER", description: "Upper bound publication year." },
             published_after: { type: "NUMBER", description: "Lower bound publication year." },
-            stock_status: { type: "STRING", enum: ["in_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter." },
+            stock_status: { type: "STRING", enum: ["in_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter. Use 'in_stock' for high/available items, 'low_stock' for items running low, 'out_of_stock' for sold out items." },
             sort_by: { type: "STRING", description: "Sort criteria: 'price_asc', 'price_desc', 'year_desc', 'year_asc', 'title'." },
             limit: { type: "NUMBER", description: "Maximum number of results to return." }
           }
@@ -636,7 +636,7 @@
           extractedStockStatus = "low_stock";
         } else if (input.includes("out of stock") || input.includes("sold out")) {
           extractedStockStatus = "out_of_stock";
-        } else if (input.includes("in stock") || input.includes("available")) {
+        } else if (input.includes("high stock") || input.includes("in stock") || input.includes("available")) {
           extractedStockStatus = "in_stock";
         }
 
@@ -649,12 +649,13 @@
           }
         }
         if (!extractedGenre) {
-          if (input.includes("fiction") && !input.includes("historical")) extractedGenre = "Literary Fiction";
+          if (input.includes("science fiction")) extractedGenre = "Fantasy"; // Best match for science fiction
+          else if (input.includes("fiction") && !input.includes("historical")) extractedGenre = "Literary Fiction";
           else if (input.includes("historical")) extractedGenre = "Historical Fiction";
           else if (input.includes("fantasy")) extractedGenre = "Fantasy";
           else if (input.includes("mystery") || input.includes("thriller")) extractedGenre = input.includes("mystery") ? "Mystery / Thriller" : "Thriller";
           else if (input.includes("cookbook") || input.includes("cooking")) extractedGenre = "Cookbook";
-          else if (input.includes("nature") || input.includes("science")) extractedGenre = "Nature & Science";
+          else if (input.includes("nature") || (input.includes("science") && !input.includes("fiction"))) extractedGenre = "Nature & Science";
           else if (input.includes("poetry")) extractedGenre = "Poetry";
           else if (input.includes("children") || input.includes("kids")) extractedGenre = "Children's / YA";
           else if (input.includes("philosophy") || input.includes("self-help")) extractedGenre = "Philosophy & Self-Help";
@@ -665,6 +666,7 @@
           .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from year|year)\s*(\d{4})/gi, '')
           .replace(/\b(20\d{2}|19\d{2})\b/g, '')
           .replace(new RegExp(knownGenres.join('|'), 'gi'), '')
+          .replace(/\b(high stock|low stock|out of stock|sold out|in stock|available|running low)\b/gi, '')
           .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category)\b/gi, '')
           .replace(/[^\w\s]/g, '')
           .trim();
@@ -736,6 +738,22 @@
 
     const SYSTEM_INSTRUCTION = `You are a helpful, warm customer support assistant for Riverside Books in Portland, Oregon. 
 Your goal is to answer customer questions strictly using live database tools.
+
+CRITICAL RULES FOR PARAMETER EXTRACTION:
+1. When a user asks about genres (e.g., "show me science fiction books"), extract the EXACT genre name from the available genres list and use it in the 'genre' parameter. Do NOT put genre terms in the 'query' parameter.
+2. When a user asks about stock levels (e.g., "high stock items", "low stock", "out of stock"), use the appropriate 'stock_status' parameter value: "in_stock", "low_stock", or "out_of_stock". Do NOT put stock-related terms in the 'query' parameter.
+3. The 'query' parameter should ONLY contain title/author keywords, NOT genres, stock status, or other structured criteria.
+4. Only use 'advanced_book_search' when you need to search books. For simple title/author searches, use 'search_books' instead.
+
+EXAMPLE MAPPINGS:
+- "Show me science fiction books" → advanced_book_search({genre: "Fantasy"}) [if no exact match, map "science fiction" to "Fantasy" or "Nature & Science"]
+- "What are the high stock items" → advanced_book_search({stock_status: "in_stock"})
+- "Show me books under $20" → advanced_book_search({max_price: 20})
+- "Find mystery books from 2023" → advanced_book_search({genre: "Mystery / Thriller", published_year: 2023})
+- "Low stock items" → advanced_book_search({stock_status: "low_stock"})
+
+AVAILABLE GENRES: Literary Fiction, Historical Fiction, Fantasy, Mystery / Thriller, Cookbook, Nature & Science, Poetry, Thriller, Children's / YA, Philosophy & Self-Help
+
 CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially if out of stock or featured in an event), you MUST invoke the 'reserve_book_copy' tool function.`;
 
     const SEARCH_EXAMPLE_CATEGORIES = [
