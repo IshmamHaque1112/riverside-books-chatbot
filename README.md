@@ -11,3 +11,9 @@ Step 2: Chatbot figures out what kind of question it is (stock, hours, policy, e
 Step 3: Chatbot looks up the relevant live data (e.g. inventory for a stock question).
 Step 4: Chatbot replies with a specific, current answer.
 Step 5: If it can't answer confidently, it suggests calling or visiting the store.
+5. Data Connection
+<img width="639" height="344" alt="aichatbotfeatures" src="https://github.com/user-attachments/assets/e03717f1-1ca5-4fc2-93ae-496c203abfd1" />
+
+
+
+6. How This Connects to the Other 3 Products This chatbot pulls live stock numbers from Product B's inventory (Mosiah), the shared book catalog everyone uses, and event info that Product D (Mara) also reads from when generating promotional content.
