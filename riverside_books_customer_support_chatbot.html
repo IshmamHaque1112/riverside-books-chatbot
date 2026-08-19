@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riverside Books - Customer Support Chatbot</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React 18 & Babel Standalone -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts: Playfair Display & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            parchment: {
+              50: '#fdfbf7',
+              100: '#f8f4eb',
+              200: '#f0e6d5',
+              300: '#e4d2b9',
+              400: '#d3b897',
+            },
+            mahogany: {
+              50: '#fdf4f4',
+              100: '#fbe6e7',
+              600: '#a3333d',
+              700: '#85242b',
+              800: '#691c22',
+              900: '#4c1216',
+            },
+            ink: {
+              700: '#362f2d',
+              800: '#262120',
+              900: '#191514',
+            }
+          },
+          fontFamily: {
+            serif: ['"Playfair Display"', 'Georgia', 'serif'],
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f8f4eb;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #d3b897;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #ad8161;
+    }
+    .typing-dot {
+      animation: typing 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1) { animation-delay: 0s; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="bg-parchment-100 text-ink-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const RIVERSIDE_DATABASE = {
+      store_info: {
+        id: 1,
+        store_name: "Riverside Books",
+        address: "428 Riverfront Place, Suite 100, Portland, OR 97201",
+        phone: "(503) 555-0192",
+        email: "hello@riversidebooks.com",
+        hours: "Monday–Saturday: 9:00 AM – 8:00 PM, Sunday: 10:00 AM – 6:00 PM",
+        return_policy: "Full refund with receipt within 30 days of purchase for books in original, unread condition.",
+        exchange_policy: "Exchanges or store credit permitted within 45 days of purchase with receipt or proof of purchase.",
+        reward_rule: "Earn 1 Point for every $1 spent. Reach 100 Points to receive a $10 store credit coupon.",
+        birthday_discount_rule: "Riverside Readers club members receive 20% off any single transaction during their birthday month!",
+        about_text: "Riverside Books is an independent, community-focused bookstore located along the scenic Portland waterfront. Founded in 2012, we curate a wide selection of contemporary fiction, local Pacific Northwest authors, poetry, children's literature, and artisanal gifts.",
+        available_genres: [
+          "Literary Fiction",
+          "Historical Fiction",
+          "Fantasy",
+          "Mystery / Thriller",
+          "Cookbook",
+          "Nature & Science",
+          "Poetry",
+          "Thriller",
+          "Children's / YA",
+          "Philosophy & Self-Help"
+        ]
+      },
+      
+      books: [
+        {
+          id: 101,
+          title: "The Map of Quiet Streets",
+          author: "Elena Rostova",
+          price: 18.99,
+          genre: "Literary Fiction",
+          isbn: "978-0-393-01928-1",
+          published_year: 2024,
+          stock_quantity: 3,
+          reorder_threshold: 5
+        },
+        {
+          id: 102,
+          title: "Echoes of the River",
+          author: "Marcus Vance",
+          price: 24.50,
+          genre: "Historical Fiction",
+          isbn: "978-1-5011-8822-4",
+          published_year: 2023,
+          stock_quantity: 8,
+          reorder_threshold: 4
+        },
+        {
+          id: 103,
+          title: "The Whispering Arbor",
+          author: "Clara Higgins",
+          price: 16.00,
+          genre: "Fantasy",
+          isbn: "978-0-7564-1290-8",
+          published_year: 2022,
+          stock_quantity: 1,
+          reorder_threshold: 3
+        },
+        {
+          id: 104,
+          title: "Shadows Over Cascadia",
+          author: "David K. Chen",
+          price: 22.00,
+          genre: "Mystery / Thriller",
+          isbn: "978-0-14-312980-0",
+          published_year: 2025,
+          stock_quantity: 0,
+          reorder_threshold: 5
+        },
+        {
+          id: 105,
+          title: "Baking along the Willamette",
+          author: "Sarah Jenkins",
+          price: 32.00,
+          genre: "Cookbook",
+          isbn: "978-1-68188-400-1",
+          published_year: 2023,
+          stock_quantity: 12,
+          reorder_threshold: 5
+        },
+        {
+          id: 106,
+          title: "Pacific Northwest Flora & Fauna",
+          author: "Dr. Robert Thorne",
+          price: 28.95,
+          genre: "Nature & Science",
+          isbn: "978-0-8117-3912-2",
+          published_year: 2021,
+          stock_quantity: 5,
+          reorder_threshold: 3
+        },
+        {
+          id: 107,
+          title: "A Century of Small Press Poetry",
+          author: "M. L. Thorne",
+          price: 14.99,
+          genre: "Poetry",
+          isbn: "978-1-933527-99-1",
+          published_year: 2020,
+          stock_quantity: 2,
+          reorder_threshold: 2
+        },
+        {
+          id: 108,
+          title: "Midnight at the Waterfront",
+          author: "Julian Thorne",
+          price: 17.50,
+          genre: "Thriller",
+          isbn: "978-0-316-42310-9",
+          published_year: 2024,
+          stock_quantity: 6,
+          reorder_threshold: 4
+        },
+        {
+          id: 109,
+          title: "Children of the Redwood Forest",
+          author: "Maya Lin",
+          price: 19.99,
+          genre: "Children's / YA",
+          isbn: "978-0-525-55523-0",
+          published_year: 2023,
+          stock_quantity: 10,
+          reorder_threshold: 5
+        },
+        {
+          id: 110,
+          title: "The Art of Mindful Reading",
+          author: "Hannah Wright",
+          price: 15.00,
+          genre: "Philosophy & Self-Help",
+          isbn: "978-1-78627-400-5",
+          published_year: 2022,
+          stock_quantity: 4,
+          reorder_threshold: 3
+        }
+      ],
+
+      events: [
+        {
+          id: 1,
+          event_date: "2026-08-25",
+          time: "6:30 PM - 8:00 PM",
+          title: "Local Author Spotlight: Elena Rostova",
+          description: "Author reading, Q&A, and book signing session for 'The Map of Quiet Streets'. Complimentary tea and pastries served!",
+          related_book_id: 101,
+          related_book_title: "The Map of Quiet Streets"
+        },
+        {
+          id: 2,
+          event_date: "2026-09-02",
+          time: "7:00 PM - 8:30 PM",
+          title: "Monthly Fiction Book Club",
+          description: "Discussion of 'Echoes of the River' led by bookstore curator Sarah Miller. All book lovers welcome!",
+          related_book_id: 102,
+          related_book_title: "Echoes of the River"
+        },
+        {
+          id: 3,
+          event_date: "2026-09-10",
+          time: "5:30 PM - 7:00 PM",
+          title: "Pacific Northwest Nature & Foraging Talk",
+          description: "Dr. Robert Thorne presents field guide slides and outdoor foraging safety tips.",
+          related_book_id: 106,
+          related_book_title: "Pacific Northwest Flora & Fauna"
+        },
+        {
+          id: 4,
+          event_date: "2026-09-18",
+          time: "10:30 AM - 11:30 AM",
+          title: "Kids Storytime & Forest Crafts",
+          description: "Interactive story reading of 'Children of the Redwood Forest' followed by a pinecone craft workshop.",
+          related_book_id: 109,
+          related_book_title: "Children of the Redwood Forest"
+        }
+      ],
+
+      merchandise: [
+        { id: 1, item_name: "Riverside Books Canvas Tote Bag", category: "Accessories", price: 16.00, stock_quantity: 25 },
+        { id: 2, item_name: "Brass Leaf Botanical Bookmark", category: "Stationery", price: 8.50, stock_quantity: 40 },
+        { id: 3, item_name: "Ceramic Waterfront Mug (12oz)", category: "Drinkware", price: 14.00, stock_quantity: 15 },
+        { id: 4, item_name: "Linen Hardcover Reading Journal", category: "Stationery", price: 22.00, stock_quantity: 10 }
+      ],
+
+      social_accounts: [
+        { platform: "Instagram", handle: "@riversidebooks_pdx", url: "https://instagram.com/riversidebooks_pdx" },
+        { platform: "Facebook", handle: "RiversideBooksPDX", url: "https://facebook.com/RiversideBooksPDX" },
+        { platform: "X / Twitter", handle: "@RiversideBooks", url: "https://twitter.com/RiversideBooks" }
+      ]
+    };
+
+    const getInventoryStatus = (book) => {
+      let level = "Medium Stock";
+      if (book.stock_quantity === 0) level = "Out of Stock";
+      else if (book.stock_quantity <= 2) level = "Low Stock";
+      else if (book.stock_quantity >= 8) level = "High Stock";
+
+      return {
+        ...book,
+        stock_level: level,
+        needs_reorder: book.stock_quantity <= book.reorder_threshold
+      };
+    };
+
+    const TOOL_DECLARATIONS = [
+      {
+        name: "advanced_book_search",
+        description: "Precise multi-criteria search for books. Use this whenever a user asks about books, inventory, prices, publication years, genres, or stock levels. Pass explicit genre filter in the 'genre' parameter when specified by the user.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            query: { type: "STRING", description: "Keywords related to title, author, or general keywords." },
+            max_price: { type: "NUMBER", description: "Maximum price limit." },
+            min_price: { type: "NUMBER", description: "Minimum price limit." },
+            genre: { type: "STRING", description: "Specific genre filter (e.g., 'Literary Fiction', 'Fantasy', 'Cookbook', 'Poetry', 'Mystery / Thriller', 'Historical Fiction', 'Nature & Science', 'Children\\'s / YA', 'Philosophy & Self-Help')." },
+            published_year: { type: "NUMBER", description: "Exact publication year if requested." },
+            published_before: { type: "NUMBER", description: "Upper bound publication year." },
+            published_after: { type: "NUMBER", description: "Lower bound publication year." },
+            stock_status: { type: "STRING", enum: ["in_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter." },
+            sort_by: { type: "STRING", description: "Sort criteria: 'price_asc', 'price_desc', 'year_desc', 'year_asc', 'stock_asc', 'title'." },
+            limit: { type: "NUMBER", description: "Maximum number of results to return." }
+          }
+        }
+      },
+      {
+        name: "get_available_genres",
+        description: "Get the list of all book genres available in our catalog.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "relational_event_books",
+        description: "Get upcoming events along with live inventory status of featured books.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "search_books",
+        description: "Search for books by title or author name.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            query: { type: "STRING", description: "Title or author search term" }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "get_store_hours",
+        description: "Get the opening and closing store hours for Riverside Books.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "get_return_policy",
+        description: "Get the store return policy and exchange policy.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "get_rewards_info",
+        description: "Get details on the Riverside Readers reward program points and birthday discount rules.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "get_upcoming_events",
+        description: "Get upcoming bookstore events, author signings, and book club meetings.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            limit: { type: "NUMBER", description: "Maximum number of events to return" }
+          }
+        }
+      },
+      {
+        name: "get_about_store",
+        description: "Get general store information including address, phone number, email, and about bio.",
+        parameters: { type: "OBJECT", properties: {} }
+      },
+      {
+        name: "search_merchandise",
+        description: "Search non-book merchandise like tote bags, bookmarks, mugs, or journals.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            query: { type: "STRING", description: "Item name or category" },
+            max_price: { type: "NUMBER", description: "Max price filter" }
+          }
+        }
+      }
+    ];
+
+    function executeDatabaseTool(name, args) {
+      console.log(`[Database Query Executed] Tool: ${name}`, args);
+      
+      switch(name) {
+        case "advanced_book_search": {
+          let results = RIVERSIDE_DATABASE.books.map(getInventoryStatus);
+
+          if (args.genre && args.genre.trim()) {
+            const searchGenre = args.genre.toLowerCase().trim();
+            results = results.filter(b => b.genre.toLowerCase().includes(searchGenre));
+          }
+
+          if (args.query && args.query.trim()) {
+            const q = args.query.toLowerCase().trim();
+            results = results.filter(b => 
+              b.title.toLowerCase().includes(q) || 
+              b.author.toLowerCase().includes(q) || 
+              b.genre.toLowerCase().includes(q)
+            );
+          }
+
+          if (typeof args.max_price === 'number') {
+            results = results.filter(b => b.price <= args.max_price);
+          }
+          if (typeof args.min_price === 'number') {
+            results = results.filter(b => b.price >= args.min_price);
+          }
+
+          if (args.genre && args.genre.trim()) {
+            const g = args.genre.toLowerCase();
+            results = results.filter(b => b.genre.toLowerCase().includes(g));
+          }
+
+          if (typeof args.published_year === 'number') {
+            results = results.filter(b => b.published_year === args.published_year);
+          }
+
+          if (typeof args.published_after === 'number') {
+            results = results.filter(b => b.published_year >= args.published_after);
+          }
+          if (typeof args.published_before === 'number') {
+            results = results.filter(b => b.published_year <= args.published_before);
+          }
+
+          if (args.stock_status) {
+            if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
+            else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 2);
+            else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
+          }
+
+          if (args.sort_by) {
+            if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
+            else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
+            else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
+            else if (args.sort_by === 'year_asc') results.sort((a,b) => b.published_year - a.published_year);
+            else if (args.sort_by === 'stock_asc') results.sort((a,b) => b.stock_quantity - b.stock_quantity);
+            else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
+          }
+
+          if (typeof args.limit === 'number' && args.limit > 0) {
+            results = results.slice(0, args.limit);
+          }
+
+          return {
+            criteria_applied: args,
+            match_count: results.length,
+            results: results
+          };
+        }
+
+        case "relational_event_books": {
+          const joinedEvents = RIVERSIDE_DATABASE.events.map(event => {
+            const book = RIVERSIDE_DATABASE.books.find(b => b.id === event.related_book_id);
+            return {
+              ...event,
+              book_details: book ? getInventoryStatus(book) : null
+            };
+          });
+          return {
+            joined_records: joinedEvents.length,
+            events_with_inventory: joinedEvents
+          };
+        }
+
+        case "search_books": {
+          const q = (args.query || "").toLowerCase();
+          const matches = RIVERSIDE_DATABASE.books
+            .filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.genre.toLowerCase().includes(q))
+            .map(getInventoryStatus);
+            
+          return {
+            query: args.query,
+            match_count: matches.length,
+            results: matches
+          };
+        }
+
+        case "get_store_hours": {
+          return {
+            store_name: RIVERSIDE_DATABASE.store_info.store_name,
+            hours: RIVERSIDE_DATABASE.store_info.hours
+          };
+        }
+
+        case "get_return_policy": {
+          return {
+            return_policy: RIVERSIDE_DATABASE.store_info.return_policy,
+            exchange_policy: RIVERSIDE_DATABASE.store_info.exchange_policy
+          };
+        }
+
+        case "get_rewards_info": {
+          return {
+            reward_rule: RIVERSIDE_DATABASE.store_info.reward_rule,
+            birthday_discount_rule: RIVERSIDE_DATABASE.store_info.birthday_discount_rule
+          };
+        }
+
+        case "get_available_genres": {
+          return {
+            genres: RIVERSIDE_DATABASE.store_info.available_genres
+          };
+        }
+
+        case "get_upcoming_events": {
+          const limit = args.limit || 5;
+          return {
+            total_events: RIVERSIDE_DATABASE.events.length,
+            upcoming_events: RIVERSIDE_DATABASE.events.slice(0, limit)
+          };
+        }
+
+        case "get_about_store": {
+          return {
+            store_name: RIVERSIDE_DATABASE.store_info.store_name,
+            about_text: RIVERSIDE_DATABASE.store_info.about_text,
+            address: RIVERSIDE_DATABASE.store_info.address,
+            phone: RIVERSIDE_DATABASE.store_info.phone,
+            email: RIVERSIDE_DATABASE.store_info.email
+          };
+        }
+
+        case "search_merchandise": {
+          const q = (args.query || "").toLowerCase();
+          let items = RIVERSIDE_DATABASE.merchandise
+            .filter(m => m.item_name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
+          if (typeof args.max_price === 'number') {
+            items = items.filter(m => m.price <= args.max_price);
+          }
+          return {
+            query: args.query,
+            results: items
+          };
+        }
+
+        default:
+          return { error: `Unknown tool name: ${name}` };
+      }
+    }
+
+    function processLocalQuery(userInput) {
+      const input = userInput.toLowerCase();
+      let toolName = null;
+      let toolArgs = {};
+
+      if (input.includes("hours") || input.includes("open") || input.includes("close") || input.includes("time") || input.includes("when are you open")) {
+        toolName = "get_store_hours";
+      } else if (input.includes("return") || input.includes("exchange") || input.includes("policy") || input.includes("refund")) {
+        toolName = "get_return_policy";
+      } else if (input.includes("reward") || input.includes("point") || input.includes("birthday") || input.includes("membership") || input.includes("discount")) {
+        toolName = "get_rewards_info";
+      } else if (input.includes("genre") || input.includes("categories") || input.includes("what kinds of books") || input.includes("book types")) {
+        toolName = "get_available_genres";
+      } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email") || input.includes("where are you")) {
+        toolName = "get_about_store";
+      } else if (input.includes("event") && (input.includes("book") || input.includes("stock") || input.includes("inventory"))) {
+        toolName = "relational_event_books";
+      } else if ((input.includes("event") || input.includes("signing") || input.includes("club") || input.includes("workshop")) && !input.includes("book")) {
+        toolName = "get_upcoming_events";
+        toolArgs = { limit: 5 };
+      } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark")) {
+        toolName = "search_merchandise";
+        toolArgs = { query: input };
+      } else {
+        toolName = "advanced_book_search";
+
+        const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)/i);
+        const extractedMaxPrice = maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined;
+
+        const minPriceMatch = input.match(/(?:over|above|more than|min|at least)\s*\$?(\d+(?:\.\d+)?)/i);
+        const extractedMinPrice = minPriceMatch ? parseFloat(minPriceMatch[1]) : undefined;
+
+        const yearBeforeMatch = input.match(/(?:before|prior to|older than|earlier than|pre-?)\s*(\d{4})/i);
+        let extractedYearBefore = yearBeforeMatch ? parseInt(yearBeforeMatch[1], 10) : undefined;
+
+        const yearAfterMatch = input.match(/(?:after|since|newer than|post-?)\s*(\d{4})/i);
+        let extractedYearAfter = yearAfterMatch ? parseInt(yearAfterMatch[1], 10) : undefined;
+
+        const yearExactMatch = input.match(/(?:published in|in year|from year|year)\s*(\d{4})/i) || input.match(/\b(20\d{2}|19\d{2})\b/);
+        let extractedYearExact = (!yearBeforeMatch && !yearAfterMatch && yearExactMatch) ? parseInt(yearExactMatch[1], 10) : undefined;
+
+        let extractedStockStatus = undefined;
+        if (input.includes("low stock") || input.includes("running low") || input.includes("reorder")) {
+          extractedStockStatus = "low_stock";
+        } else if (input.includes("out of stock") || input.includes("sold out") || input.includes("unavailable")) {
+          extractedStockStatus = "out_of_stock";
+        } else if (input.includes("in stock") || input.includes("available")) {
+          extractedStockStatus = "in_stock";
+        }
+
+        let extractedGenre = undefined;
+        const knownGenres = RIVERSIDE_DATABASE.store_info.available_genres;
+        for (const g of knownGenres) {
+          if (input.includes(g.toLowerCase())) {
+            extractedGenre = g;
+            break;
+          }
+        }
+        if (!extractedGenre) {
+          if (input.includes("fiction") && !input.includes("historical")) extractedGenre = "Literary Fiction";
+          else if (input.includes("historical")) extractedGenre = "Historical Fiction";
+          else if (input.includes("fantasy")) extractedGenre = "Fantasy";
+          else if (input.includes("mystery") || input.includes("thriller")) extractedGenre = input.includes("mystery") ? "Mystery / Thriller" : "Thriller";
+          else if (input.includes("cookbook") || input.includes("cooking") || input.includes("baking")) extractedGenre = "Cookbook";
+          else if (input.includes("nature") || input.includes("science") || input.includes("flora")) extractedGenre = "Nature & Science";
+          else if (input.includes("poetry")) extractedGenre = "Poetry";
+          else if (input.includes("children") || input.includes("kids") || input.includes("ya")) extractedGenre = "Children's / YA";
+          else if (input.includes("philosophy") || input.includes("self-help") || input.includes("mindful")) extractedGenre = "Philosophy & Self-Help";
+        }
+
+        let cleanQuery = input
+          .replace(/(?:under|below|less than|max|cheaper than|over|above|more than|min|at least|\$)\s*\$?(\d+(?:\.\d+)?)/gi, '')
+          .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from year|year|pre-?|post-?)\s*(\d{4})/gi, '')
+          .replace(/\b(20\d{2}|19\d{2})\b/g, '')
+          .replace(new RegExp(knownGenres.join('|'), 'gi'), '')
+          .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category)\b/gi, '')
+          .replace(/[^\w\s]/g, '')
+          .trim();
+
+        const finalQuery = (cleanQuery.length >= 2) ? cleanQuery : undefined;
+
+        toolArgs = {
+          query: finalQuery,
+          genre: extractedGenre,
+          max_price: extractedMaxPrice,
+          min_price: extractedMinPrice,
+          published_year: extractedYearExact,
+          published_before: extractedYearBefore,
+          published_after: extractedYearAfter,
+          stock_status: extractedStockStatus
+        };
+      }
+
+      const dbData = executeDatabaseTool(toolName, toolArgs);
+      let responseText = "";
+
+      if (toolName === "advanced_book_search") {
+        if (dbData.results && dbData.results.length > 0) {
+          const list = dbData.results.map(b => 
+            `• **${b.title}** by ${b.author} - $${b.price.toFixed(2)} (${b.genre}, ${b.published_year}) [**${b.stock_quantity} in stock**]`
+          ).join("\n");
+          
+          let prefix = "Here are matching books from our database:";
+          if (toolArgs.genre) {
+            prefix = `Here are books in the **${toolArgs.genre}** genre:`;
+          } else if (toolArgs.published_year) {
+            prefix = `Here are books published in **${toolArgs.published_year}**:`;
+          } else if (toolArgs.published_before) {
+            prefix = `Here are books published in or before **${toolArgs.published_before}**:`;
+          } else if (toolArgs.published_after) {
+            prefix = `Here are books published in or after **${toolArgs.published_after}**:`;
+          } else if (toolArgs.max_price) {
+            prefix = `Here are books priced at or under **$${toolArgs.max_price.toFixed(2)}**:`;
+          }
+
+          responseText = `${prefix}\n\n${list}\n\nFeel free to ask us to hold any title at (503) 555-0192!`;
+        } else {
+          responseText = `I searched our inventory using your criteria, but found no matching books. Try adjusting your genre, year, price limit, or search terms! You can also call us at (503) 555-0192 for custom orders.`;
+        }
+      } else if (toolName === "get_available_genres") {
+        const genreList = dbData.genres.map(g => `• ${g}`).join("\n");
+        responseText = `Here are the book genres we currently curate at Riverside Books:\n\n${genreList}\n\nFeel free to ask for books in any of these genres!`;
+      } else if (toolName === "relational_event_books") {
+        const eventsList = dbData.events_with_inventory.map(e => {
+          const bookInfo = e.book_details 
+            ? `📖 *${e.book_details.title}* ($${e.book_details.price.toFixed(2)} - ${e.book_details.stock_quantity} in stock)`
+            : '📖 Featured title details available at counter';
+          return `• **${e.title}**\n  📆 Date: ${e.event_date} (${e.time})\n  ${bookInfo}`;
+        }).join("\n\n");
+        responseText = `Here are our upcoming bookstore events alongside live stock status for featured books:\n\n${eventsList}`;
+      } else if (toolName === "search_books") {
+        if (dbData.results && dbData.results.length > 0) {
+          const b = dbData.results[0];
+          if (b.stock_quantity > 0) {
+            responseText = `Yes! We currently have **${b.stock_quantity} copy${b.stock_quantity > 1 ? 'ies' : ''}** of *${b.title}* by ${b.author} in stock. It is priced at $${b.price.toFixed(2)} (${b.genre}, published ${b.published_year}).`;
+          } else {
+            responseText = `We carry *${b.title}* by ${b.author} ($${b.price.toFixed(2)}), but it is currently **out of stock**.`;
+          }
+        } else {
+          responseText = `I searched our system for "${toolArgs.query}", but I couldn't find a matching title or author.`;
+        }
+      } else if (toolName === "get_store_hours") {
+        responseText = `Our store hours at Riverside Books are:\n\n📅 **${dbData.hours}**`;
+      } else if (toolName === "get_return_policy") {
+        responseText = `Here is our return and exchange policy:\n\n• **Returns:** ${dbData.return_policy}\n• **Exchanges:** ${dbData.exchange_policy}`;
+      } else if (toolName === "get_rewards_info") {
+        responseText = `With our **Riverside Readers** program:\n\n• **Points:** ${dbData.reward_rule}\n• **Birthday Perk:** ${dbData.birthday_discount_rule}`;
+      } else if (toolName === "get_upcoming_events") {
+        const evList = dbData.upcoming_events.map(e => `• **${e.title}**\n  📆 ${e.event_date} (${e.time})\n  ℹ️ ${e.description}`).join("\n\n");
+        responseText = `Here are our upcoming events at Riverside Books:\n\n${evList}`;
+      } else if (toolName === "get_about_store") {
+        responseText = `**${dbData.store_name}**\n${dbData.about_text}\n\n📍 **Address:** ${dbData.address}\n📞 **Phone:** ${dbData.phone}`;
+      } else if (toolName === "search_merchandise") {
+        if (dbData.results && dbData.results.length > 0) {
+          const items = dbData.results.map(m => `• **${m.item_name}** ($${m.price.toFixed(2)}) - ${m.stock_quantity} available`).join("\n");
+          responseText = `Here is what we found in our gift and merchandise inventory:\n\n${items}`;
+        } else {
+          responseText = `We carry canvas tote bags, brass bookmarks, ceramic mugs, and hardcover reading journals!`;
+        }
+      }
+
+      return {
+        text: responseText,
+        toolCalled: { name: toolName, args: toolArgs, result: dbData }
+      };
+    }
+
+    const SYSTEM_INSTRUCTION = `You are a helpful, warm customer support assistant for Riverside Books, an independent bookstore in Portland, Oregon. 
+Your goal is to answer customer questions strictly using live database tools.
+CRITICAL INSTRUCTION FOR GENRE & YEAR QUERIES: When a user asks for books in a specific genre (e.g., "show me fantasy books", "cookbook", "poetry", "literary fiction"), you MUST populate the 'genre' parameter in 'advanced_book_search'. When a user asks for books published in a specific year, populate 'published_year'.
+Always use advanced_book_search or specific tool calls before answering. Never make up book availability, stock counts, prices, or store policies.`;
+
+    const SEARCH_EXAMPLE_CATEGORIES = [
+      {
+        category: "1. Genre & Category Filtering",
+        icon: "fa-feather",
+        phrases: [
+          "Show me fantasy books",
+          "What cookbooks do you carry?",
+          "Find poetry books",
+          "Show me historical fiction",
+          "What genres do you have?"
+        ]
+      },
+      {
+        category: "2. Publication Year & Date Filtering",
+        icon: "fa-calendar-days",
+        phrases: [
+          "Find books published in the year 2021",
+          "Show me books published in 2023",
+          "What books do you have published before 2022?",
+          "Find titles published since 2024",
+          "Are there any books from 2020?"
+        ]
+      },
+      {
+        category: "2. Price & Budget Filtering",
+        icon: "fa-tag",
+        phrases: [
+          "Find books under $20",
+          "Show me books cheaper than $18",
+          "What books cost over $25?",
+          "What is the most expensive book in store?",
+          "Show me items under $15"
+        ]
+      },
+      {
+        category: "3. Inventory & Stock Status",
+        icon: "fa-boxes-stacked",
+        phrases: [
+          "Show low stock books",
+          "Which books are out of stock?",
+          "Do you have copies of The Map of Quiet Streets in stock?",
+          "List all available books"
+        ]
+      },
+      {
+        category: "4. Genre & Author Specifics",
+        icon: "fa-feather",
+        phrases: [
+          "Show me literary fiction books",
+          "Do you have any cookbooks?",
+          "Find books by Dr. Robert Thorne",
+          "What poetry books do you carry?"
+        ]
+      },
+      {
+        category: "5. Store Policies, Hours & Rewards",
+        icon: "fa-store",
+        phrases: [
+          "What are your store hours?",
+          "What is your return policy?",
+          "How does the Riverside Readers rewards program work?",
+          "Do you offer birthday discounts?",
+          "Where are you located?"
+        ]
+      },
+      {
+        category: "6. Events & Relational Data",
+        icon: "fa-calendar-star",
+        phrases: [
+          "Which books have upcoming author events?",
+          "What events are happening in September 2026?",
+          "Tell me about the kids storytime event"
+        ]
+      }
+    ];
+
+    function App() {
+      const [messages, setMessages] = React.useState([
+        {
+          id: 1,
+          sender: 'bot',
+          text: "Welcome to Riverside Books! 📚 I can help you check book inventory stock, store hours, return policies, or filter books by price and publication year. How can I assist you today?",
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+      const [input, setInput] = React.useState('');
+      const [isLoading, setIsLoading] = React.useState(false);
+      const [activeToolInfo, setActiveToolInfo] = React.useState(null);
+      
+      const [queryMode, setQueryMode] = React.useState('gemini_flash');
+      const [apiKey, setApiKey] = React.useState('AQ.Ab8RN6LfsLBGmYmH_feekfGZHpDaRgzaadfvmR5BJG6BuPOfXQ');
+      const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+      const [isDbExplorerOpen, setIsDbExplorerOpen] = React.useState(false);
+      const [isExamplesModalOpen, setIsExamplesModalOpen] = React.useState(false);
+      const [activeDbTab, setActiveDbTab] = React.useState('books');
+
+      const [qbTable, setQbTable] = React.useState('books');
+      const [qbMaxPrice, setQbMaxPrice] = React.useState('');
+      const [qbStockFilter, setQbStockFilter] = React.useState('all');
+      const [qbSortBy, setQbSortBy] = React.useState('none');
+      const [qbCustomKeyword, setQbCustomKeyword] = React.useState('');
+      const [qbResults, setQbResults] = React.useState(null);
+
+      const messagesEndRef = React.useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      React.useEffect(() => {
+        scrollToBottom();
+      }, [messages, isLoading, activeToolInfo]);
+
+      async function callGeminiApi(userQuery, history) {
+        const keyToUse = apiKey.trim();
+        if (!keyToUse) {
+          throw new Error("API key required for Gemini Flash mode.");
+        }
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyToUse}`;
+
+        const contents = history.map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }]
+        }));
+
+        contents.push({ role: 'user', parts: [{ text: userQuery }] });
+
+        const payload = {
+          contents: contents,
+          tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] }
+        };
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`API returned status ${response.status}`);
+        }
+
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        const part = candidate?.content?.parts?.[0];
+
+        if (part && part.functionCall) {
+          const toolCall = part.functionCall;
+          const toolResult = executeDatabaseTool(toolCall.name, toolCall.args || {});
+
+          setActiveToolInfo({
+            name: toolCall.name,
+            args: toolCall.args,
+            result: toolResult
+          });
+
+          const followUpContents = [
+            ...contents,
+            candidate.content,
+            {
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: toolCall.name,
+                  response: { content: toolResult }
+                }
+              }]
+            }
+          ];
+
+          const followUpResponse = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: followUpContents,
+              systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] }
+            })
+          });
+
+          const followUpData = await followUpResponse.json();
+          const finalCandidate = followUpData.candidates?.[0];
+          const finalPart = finalCandidate?.content?.parts?.[0];
+
+          return {
+            text: finalPart?.text || "Here is the information from our database.",
+            toolCalled: { name: toolCall.name, args: toolCall.args, result: toolResult }
+          };
+        }
+
+        return {
+          text: part?.text || "I'm here to help with Riverside Books questions!",
+          toolCalled: null
+        };
+      }
+
+      const handleSendMessage = async (textToSend) => {
+        const text = textToSend || input;
+        if (!text.trim()) return;
+
+        const userMsg = {
+          id: Date.now(),
+          sender: 'user',
+          text: text,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setIsLoading(true);
+        setActiveToolInfo(null);
+        setIsExamplesModalOpen(false);
+
+        try {
+          let botReply = null;
+          let activeModeToUse = queryMode;
+          if (queryMode === 'gemini_flash' && !apiKey.trim()) {
+            activeModeToUse = 'sqlite_local';
+          }
+
+          if (activeModeToUse === 'gemini_flash') {
+            botReply = await callGeminiApi(text, messages);
+          } else {
+            await new Promise(res => setTimeout(res, 400));
+            botReply = processLocalQuery(text);
+          }
+
+          if (botReply.toolCalled) {
+            setActiveToolInfo(botReply.toolCalled);
+          }
+
+          setMessages(prev => [
+            ...prev,
+            {
+              id: Date.now() + 1,
+              sender: 'bot',
+              text: botReply.text,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              toolInfo: botReply.toolCalled
+            }
+          ]);
+
+        } catch (error) {
+          console.error("Error generating response:", error);
+          try {
+            const fallbackReply = processLocalQuery(text);
+            setMessages(prev => [
+              ...prev,
+              {
+                id: Date.now() + 1,
+                sender: 'bot',
+                text: `*(Notice: Gemini API request encountered an issue. Automatically answered via SQLite Local Database Mode)*\n\n${fallbackReply.text}`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                toolInfo: fallbackReply.toolCalled
+              }
+            ]);
+          } catch (fallbackErr) {
+            setMessages(prev => [
+              ...prev,
+              {
+                id: Date.now() + 1,
+                sender: 'bot',
+                text: "I experienced a temporary glitch connecting to our system. Please try again, or feel free to call us directly at (503) 555-0192!",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              }
+            ]);
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleClearChat = () => {
+        setMessages([
+          {
+            id: Date.now(),
+            sender: 'bot',
+            text: "Chat cleared! How else can I help you with Riverside Books today?",
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+        setActiveToolInfo(null);
+      };
+
+      return (
+        <div className="flex flex-col h-screen max-w-5xl mx-auto w-full bg-parchment-50 border-x border-parchment-300 shadow-xl">
+          
+          <header className="bg-mahogany-900 text-parchment-100 px-4 py-3.5 flex flex-col sm:flex-row items-center justify-between border-b border-mahogany-700 shadow-md gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="w-10 h-10 rounded-full bg-mahogany-700 flex items-center justify-center border border-parchment-400/30 text-parchment-100 shadow-inner shrink-0">
+                <i className="fa-solid fa-book-open text-lg"></i>
+              </div>
+              <div>
+                <h1 className="font-serif text-xl font-bold tracking-wide text-parchment-100">Riverside Books</h1>
+                <p className="text-xs text-parchment-300 flex items-center gap-1.5 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                  Customer Support Chatbot • Open Today 'til 8 PM
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
+              <div className="bg-mahogany-950/80 p-1 rounded-xl flex items-center border border-parchment-400/20 text-xs">
+                <button
+                  onClick={() => setQueryMode('gemini_flash')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 ${
+                    queryMode === 'gemini_flash' 
+                      ? 'bg-amber-600 text-white shadow-sm' 
+                      : 'text-parchment-300 hover:text-white'
+                  }`}
+                  title="Use Google Gemini 1.5 Flash API with Native Function Calling"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles text-amber-200"></i>
+                  <span>Gemini Flash Mode</span>
+                </button>
+
+                <button
+                  onClick={() => setQueryMode('sqlite_local')}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 ${
+                    queryMode === 'sqlite_local' 
+                      ? 'bg-mahogany-700 text-white shadow-sm' 
+                      : 'text-parchment-300 hover:text-white'
+                  }`}
+                  title="Use Built-in SQLite Simulated Local Router"
+                >
+                  <i className="fa-solid fa-database text-amber-400"></i>
+                  <span>SQLite Local Mode</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setIsExamplesModalOpen(true)}
+                className="px-3 py-2 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded-xl border border-amber-500/40 transition flex items-center gap-1.5 shadow-sm font-semibold"
+                title="View Comprehensive Search Examples"
+              >
+                <i className="fa-solid fa-list-check"></i>
+                <span className="hidden md:inline">Query Examples</span>
+              </button>
+
+              <button
+                onClick={() => setIsDbExplorerOpen(true)}
+                className="px-3 py-2 text-xs bg-mahogany-800 hover:bg-mahogany-700 text-parchment-200 rounded-xl border border-parchment-400/20 transition flex items-center gap-1.5 shadow-sm"
+                title="View Database Tables"
+              >
+                <i className="fa-solid fa-database text-amber-400"></i>
+                <span className="hidden md:inline font-medium">DB Explorer</span>
+              </button>
+
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2.5 text-parchment-300 hover:text-parchment-100 hover:bg-mahogany-800 rounded-xl transition relative"
+                title="API Settings"
+              >
+                <i className="fa-solid fa-sliders text-base"></i>
+              </button>
+
+              <button
+                onClick={handleClearChat}
+                className="p-2.5 text-parchment-300 hover:text-rose-300 hover:bg-mahogany-800 rounded-xl transition"
+                title="Reset Conversation"
+              >
+                <i className="fa-solid fa-rotate-right text-base"></i>
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-parchment-50">
+            
+            <div className="bg-parchment-200/60 border border-parchment-300 rounded-xl p-4 text-ink-700 text-sm flex flex-col gap-3 shadow-sm">
+              <div className="flex gap-3 items-start">
+                <div className="text-mahogany-700 text-xl pt-0.5">
+                  <i className="fa-solid fa-circle-info"></i>
+                </div>
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="font-semibold font-serif text-mahogany-900">Riverside Books Customer Support Assistant</p>
+                    <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                      queryMode === 'gemini_flash' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-mahogany-100 text-mahogany-900 border border-mahogany-200'
+                    }`}>
+                      Mode Active: {queryMode === 'gemini_flash' ? '⚡ Gemini 1.5 Flash Querying' : '🗄️ SQLite Local Router'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-ink-700 leading-relaxed">
+                    Test out queries across publication years, pricing, inventory levels, store hours, and policies. Click any example below or open the full catalog!
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-parchment-300/80 pt-3 mt-1 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-mahogany-900 flex items-center gap-1.5">
+                    <i className="fa-solid fa-wand-magic-sparkles text-amber-700"></i>
+                    <span>Quick-Start Formatting & Search Examples:</span>
+                  </p>
+                  <button
+                    onClick={() => setIsExamplesModalOpen(true)}
+                    className="text-xs text-mahogany-700 hover:text-mahogany-900 font-semibold underline flex items-center gap-1"
+                  >
+                    <span>View All Categories</span>
+                    <i className="fa-solid fa-arrow-right text-[10px]"></i>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+                  {SEARCH_EXAMPLE_CATEGORIES.slice(0, 3).map((cat, idx) => (
+                    <div key={idx} className="bg-white/90 p-2.5 rounded-lg border border-parchment-300 shadow-2xs space-y-1.5">
+                      <span className="font-bold text-[11px] text-mahogany-800 block border-b border-parchment-200 pb-1 flex items-center gap-1.5">
+                        <i className={`fa-solid ${cat.icon} text-amber-700`}></i>
+                        <span className="truncate">{cat.category}</span>
+                      </span>
+                      <div className="flex flex-col gap-1 pt-0.5">
+                        {cat.phrases.slice(0, 2).map((phrase, pIdx) => (
+                          <button
+                            key={pIdx}
+                            onClick={() => handleSendMessage(phrase)}
+                            disabled={isLoading}
+                            className="text-left text-[11px] font-medium text-ink-800 hover:text-mahogany-700 hover:bg-parchment-100 p-1.5 rounded transition flex items-center justify-between group disabled:opacity-50"
+                          >
+                            <span className="truncate pr-1">"{phrase}"</span>
+                            <i className="fa-solid fa-arrow-right-long text-amber-700 opacity-0 group-hover:opacity-100 transition shrink-0 text-[10px]"></i>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            <hr className="border-parchment-200 my-2" />
+
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} space-y-1`}
+              >
+                <div className="flex items-end gap-2 max-w-[88%] sm:max-w-[78%]">
+                  {msg.sender === 'bot' && (
+                    <div className="w-7 h-7 rounded-full bg-mahogany-800 text-parchment-100 flex items-center justify-center text-xs shadow shrink-0">
+                      <i className="fa-solid fa-book"></i>
+                    </div>
+                  )}
+
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm shadow-2xs leading-relaxed ${
+                      msg.sender === 'user'
+                        ? 'bg-mahogany-700 text-white rounded-br-none'
+                        : 'bg-white text-ink-800 border border-parchment-300 rounded-bl-none'
+                    }`}
+                  >
+                    {msg.toolInfo && (
+                      <div className="mb-2.5 pb-2 border-b border-parchment-200 text-xs text-amber-900 bg-amber-50/70 p-2 rounded-md font-mono flex items-center gap-2">
+                        <i className="fa-solid fa-bolt text-amber-600"></i>
+                        <span>
+                          <strong>Tool Queried ({queryMode === 'gemini_flash' ? 'Gemini Flash' : 'SQLite'}):</strong> {msg.toolInfo.name}({JSON.stringify(msg.toolInfo.args)})
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="whitespace-pre-line">
+                      {msg.text.split('**').map((part, i) => 
+                        i % 2 === 1 ? <strong key={i} className="font-semibold">{part}</strong> : part
+                      )}
+                    </div>
+
+                    <div className={`text-[10px] mt-1.5 text-right ${msg.sender === 'user' ? 'text-mahogany-200' : 'text-gray-400'}`}>
+                      {msg.time}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="flex items-start gap-2 max-w-[80%]">
+                <div className="w-7 h-7 rounded-full bg-mahogany-800 text-parchment-100 flex items-center justify-center text-xs shadow shrink-0">
+                  <i className="fa-solid fa-book"></i>
+                </div>
+                <div className="bg-white border border-parchment-300 rounded-2xl rounded-bl-none px-4 py-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-mahogany-600 typing-dot"></span>
+                      <span className="w-2 h-2 rounded-full bg-mahogany-600 typing-dot"></span>
+                      <span className="w-2 h-2 rounded-full bg-mahogany-600 typing-dot"></span>
+                    </div>
+                    <span className="text-xs font-serif italic text-mahogany-800">
+                      Gemini 1.5 Flash parsing year & parameter filters...
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </main>
+
+          <footer className="p-3 sm:p-4 bg-white border-t border-parchment-300 shadow-md">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask anything (e.g., 'Find books published in the year 2021')"
+                disabled={isLoading}
+                className="flex-1 bg-parchment-50 border border-parchment-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mahogany-600/50 focus:border-mahogany-600 text-ink-900 placeholder-parchment-400 disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={isLoading || !input.trim()}
+                className="bg-mahogany-700 hover:bg-mahogany-800 disabled:bg-parchment-300 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition flex items-center gap-2 shadow-sm disabled:cursor-not-allowed shrink-0"
+              >
+                <span>Send</span>
+                <i className="fa-solid fa-paper-plane text-xs"></i>
+              </button>
+            </form>
+            <div className="mt-2 text-center text-[11px] text-parchment-400 font-medium">
+              Active Engine: {queryMode === 'gemini_flash' ? 'Google Gemini 1.5 Flash Tool Use' : 'SQLite Local Regex Simulator'}
+            </div>
+          </footer>
+
+          {isExamplesModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 animate-fadeIn">
+              <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-parchment-300 overflow-hidden">
+                
+                <div className="bg-mahogany-900 text-parchment-100 px-6 py-4 flex items-center justify-between border-b border-mahogany-700">
+                  <div className="flex items-center gap-2.5">
+                    <i className="fa-solid fa-list-check text-amber-400 text-lg"></i>
+                    <div>
+                      <h2 className="font-serif font-bold text-lg text-parchment-100">Comprehensive Search & Query Examples</h2>
+                      <p className="text-xs text-parchment-300">Click any example below to instantly query the chatbot assistant!</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsExamplesModalOpen(false)}
+                    className="text-parchment-300 hover:text-white p-1 rounded-lg transition"
+                  >
+                    <i className="fa-solid fa-xmark text-lg"></i>
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-auto p-4 sm:p-6 bg-parchment-50 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {SEARCH_EXAMPLE_CATEGORIES.map((cat, idx) => (
+                      <div key={idx} className="bg-white p-4 rounded-xl border border-parchment-300 shadow-2xs space-y-2.5">
+                        <h3 className="font-serif font-bold text-xs uppercase tracking-wider text-mahogany-900 flex items-center gap-2 border-b border-parchment-200 pb-2">
+                          <i className={`fa-solid ${cat.icon} text-amber-700 text-sm`}></i>
+                          <span>{cat.category}</span>
+                        </h3>
+                        <div className="flex flex-col gap-1.5">
+                          {cat.phrases.map((phrase, pIdx) => (
+                            <button
+                              key={pIdx}
+                              onClick={() => handleSendMessage(phrase)}
+                              disabled={isLoading}
+                              className="text-left text-xs font-medium text-ink-800 hover:text-white hover:bg-mahogany-700 bg-parchment-50 p-2 rounded-lg transition flex items-center justify-between group disabled:opacity-50 border border-parchment-200/60"
+                            >
+                              <span className="pr-2">"{phrase}"</span>
+                              <i className="fa-solid fa-arrow-right-long text-amber-600 group-hover:text-amber-300 transition shrink-0 text-xs"></i>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-3 sm:p-4 bg-parchment-100 border-t border-parchment-300 flex justify-between items-center">
+                  <span className="text-xs text-ink-700 italic">Tip: You can combine years, prices, and genres in your own custom sentences!</span>
+                  <button
+                    onClick={() => setIsExamplesModalOpen(false)}
+                    className="px-4 py-2 bg-mahogany-700 hover:bg-mahogany-800 text-white rounded-lg text-xs font-semibold"
+                  >
+                    Close Catalog
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isDbExplorerOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 animate-fadeIn">
+              <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-parchment-300 overflow-hidden">
+                
+                <div className="bg-mahogany-900 text-parchment-100 px-6 py-4 flex items-center justify-between border-b border-mahogany-700">
+                  <div className="flex items-center gap-2.5">
+                    <i className="fa-solid fa-database text-amber-400 text-lg"></i>
+                    <h2 className="font-serif font-bold text-lg text-parchment-100">Riverside Books Database Explorer</h2>
+                  </div>
+                  <button
+                    onClick={() => setIsDbExplorerOpen(false)}
+                    className="text-parchment-300 hover:text-white p-1 rounded-lg transition"
+                  >
+                    <i className="fa-solid fa-xmark text-lg"></i>
+                  </button>
+                </div>
+
+                <div className="flex bg-parchment-100 border-b border-parchment-300 overflow-x-auto p-2 gap-1">
+                  {[
+                    { id: 'books', label: 'books & inventory_status', icon: 'fa-book' },
+                    { id: 'query_builder', label: 'SQL & Custom Query Console', icon: 'fa-terminal' },
+                    { id: 'store_info', label: 'store_info', icon: 'fa-store' },
+                    { id: 'events', label: 'events', icon: 'fa-calendar-days' },
+                    { id: 'merchandise', label: 'merchandise', icon: 'fa-gift' },
+                    { id: 'social_accounts', label: 'social_accounts', icon: 'fa-share-nodes' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveDbTab(tab.id)}
+                      className={`px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
+                        activeDbTab === tab.id
+                          ? 'bg-mahogany-700 text-white shadow-2xs'
+                          : 'text-ink-700 hover:bg-parchment-200'
+                      }`}
+                    >
+                      <i className={`fa-solid ${tab.icon}`}></i>
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex-1 overflow-auto p-4 bg-parchment-50">
+                  {activeDbTab === 'query_builder' && (
+                    <div className="space-y-4">
+                      <div className="bg-white p-4 rounded-xl border border-parchment-300 shadow-sm space-y-3">
+                        <h3 className="font-serif font-bold text-sm text-mahogany-900 flex items-center gap-2">
+                          <i className="fa-solid fa-sliders text-amber-600"></i>
+                          Interactive Visual SQL Query Builder
+                        </h3>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="block font-medium text-gray-700 mb-1">Target Table</label>
+                            <select 
+                              value={qbTable} 
+                              onChange={(e) => setQbTable(e.target.value)}
+                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
+                            >
+                              <option value="books">books (Catalog)</option>
+                              <option value="events_joined">events JOIN books</option>
+                              <option value="merchandise">merchandise</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block font-medium text-gray-700 mb-1">Max Price Limit ($)</label>
+                            <input 
+                              type="number" 
+                              placeholder="e.g. 20" 
+                              value={qbMaxPrice} 
+                              onChange={(e) => setQbMaxPrice(e.target.value)}
+                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block font-medium text-gray-700 mb-1">Stock Level Filter</label>
+                            <select 
+                              value={qbStockFilter} 
+                              onChange={(e) => setQbStockFilter(e.target.value)}
+                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
+                            >
+                              <option value="all">All Items</option>
+                              <option value="in_stock">In Stock (&gt;0)</option>
+                              <option value="low_stock">Low Stock (&lt;=2)</option>
+                              <option value="out_of_stock">Out of Stock (=0)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block font-medium text-gray-700 mb-1">Sort By Order</label>
+                            <select 
+                              value={qbSortBy} 
+                              onChange={(e) => setQbSortBy(e.target.value)}
+                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
+                            >
+                              <option value="none">Default Order</option>
+                              <option value="price_asc">Price: Low to High</option>
+                              <option value="price_desc">Price: High to Low</option>
+                              <option value="year_desc">Year: Newest First</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-medium text-gray-700 mb-1 text-xs">Search Keyword (Title / Author / Genre)</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Thorne, Fiction..." 
+                            value={qbCustomKeyword} 
+                            onChange={(e) => setQbCustomKeyword(e.target.value)}
+                            className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 text-xs font-mono"
+                          />
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            let toolName = "advanced_book_search";
+                            let args = {
+                              query: qbCustomKeyword,
+                              max_price: qbMaxPrice ? parseFloat(qbMaxPrice) : undefined,
+                              stock_status: qbStockFilter !== 'all' ? qbStockFilter : undefined,
+                              sort_by: qbSortBy !== 'none' ? qbSortBy : undefined
+                            };
+                            if (qbTable === 'events_joined') toolName = "relational_event_books";
+                            else if (qbTable === 'merchandise') {
+                              toolName = "search_merchandise";
+                              args = { query: qbCustomKeyword, max_price: qbMaxPrice ? parseFloat(qbMaxPrice) : undefined };
+                            }
+
+                            const result = executeDatabaseTool(toolName, args);
+                            setQbResults({ toolName, args, result });
+                          }}
+                          className="bg-mahogany-700 hover:bg-mahogany-800 text-white font-semibold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2"
+                        >
+                          <i className="fa-solid fa-play"></i>
+                          <span>Execute Query</span>
+                        </button>
+                      </div>
+
+                      {qbResults && (
+                        <div className="bg-white p-4 rounded-xl border border-parchment-300 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-serif font-bold text-xs text-mahogany-900">Query Output Result</span>
+                            <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                              Matches Found: {qbResults.result.match_count ?? qbResults.result.joined_records ?? qbResults.result.results?.length ?? 0}
+                            </span>
+                          </div>
+                          <pre className="bg-parchment-100 text-ink-900 p-3 rounded-lg font-mono text-[11px] overflow-x-auto max-h-52 border border-parchment-200">
+                            {JSON.stringify(qbResults.result, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeDbTab === 'books' && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                        <thead>
+                          <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                            <th className="p-2.5">ID</th>
+                            <th className="p-2.5">Title</th>
+                            <th className="p-2.5">Author</th>
+                            <th className="p-2.5">Genre</th>
+                            <th className="p-2.5">Year</th>
+                            <th className="p-2.5">Price</th>
+                            <th className="p-2.5">Stock</th>
+                            <th className="p-2.5">Status View</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-parchment-200">
+                          {RIVERSIDE_DATABASE.books.map(book => {
+                            const status = getInventoryStatus(book);
+                            return (
+                              <tr key={book.id} className="hover:bg-parchment-100">
+                                <td className="p-2.5 font-mono text-gray-500">{book.id}</td>
+                                <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
+                                <td className="p-2.5">{book.author}</td>
+                                <td className="p-2.5">{book.genre}</td>
+                                <td className="p-2.5 font-mono">{book.published_year}</td>
+                                <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
+                                <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
+                                <td className="p-2.5">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    status.stock_level === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                                    status.stock_level === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {status.stock_level}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {activeDbTab === 'store_info' && (
+                    <div className="space-y-3 text-xs bg-white p-4 rounded-xl border border-parchment-300">
+                      <div><strong className="text-mahogany-900 font-serif text-sm">Store Name:</strong> {RIVERSIDE_DATABASE.store_info.store_name}</div>
+                      <div><strong className="text-mahogany-900 font-serif text-sm">Address:</strong> {RIVERSIDE_DATABASE.store_info.address}</div>
+                      <div><strong className="text-mahogany-900 font-serif text-sm">Hours:</strong> {RIVERSIDE_DATABASE.store_info.hours}</div>
+                      <div><strong className="text-mahogany-900 font-serif text-sm">Return Policy:</strong> {RIVERSIDE_DATABASE.store_info.return_policy}</div>
+                    </div>
+                  )}
+
+                  {activeDbTab === 'events' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {RIVERSIDE_DATABASE.events.map(ev => (
+                        <div key={ev.id} className="bg-white p-3.5 rounded-xl border border-parchment-300 space-y-1.5 text-xs">
+                          <div className="font-serif font-bold text-mahogany-900 text-sm">{ev.title}</div>
+                          <div className="text-amber-800 font-semibold">{ev.event_date} • {ev.time}</div>
+                          <p className="text-gray-600 leading-normal">{ev.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeDbTab === 'merchandise' && (
+                    <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                      <thead>
+                        <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                          <th className="p-2.5">Item Name</th>
+                          <th className="p-2.5">Category</th>
+                          <th className="p-2.5">Price</th>
+                          <th className="p-2.5">Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-parchment-200">
+                        {RIVERSIDE_DATABASE.merchandise.map(item => (
+                          <tr key={item.id} className="hover:bg-parchment-100">
+                            <td className="p-2.5 font-semibold text-mahogany-900">{item.item_name}</td>
+                            <td className="p-2.5">{item.category}</td>
+                            <td className="p-2.5 font-mono">${item.price.toFixed(2)}</td>
+                            <td className="p-2.5 font-mono font-bold">{item.stock_quantity}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {activeDbTab === 'social_accounts' && (
+                    <div className="space-y-2 text-xs">
+                      {RIVERSIDE_DATABASE.social_accounts.map((s, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-lg border border-parchment-300 flex justify-between items-center">
+                          <span className="font-semibold text-mahogany-900">{s.platform}</span>
+                          <span className="text-amber-800 font-mono">{s.handle}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-parchment-100 border-t border-parchment-300 text-right">
+                  <button
+                    onClick={() => setIsDbExplorerOpen(false)}
+                    className="px-4 py-2 bg-mahogany-700 hover:bg-mahogany-800 text-white rounded-lg text-xs font-semibold"
+                  >
+                    Close Explorer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isSettingsOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-parchment-300 space-y-4">
+                <div className="flex items-center justify-between border-b border-parchment-200 pb-3">
+                  <h3 className="font-serif font-bold text-lg text-mahogany-900 flex items-center gap-2">
+                    <i className="fa-solid fa-key text-amber-600"></i>
+                    Gemini API Settings
+                  </h3>
+                  <button onClick={() => setIsSettingsOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <i className="fa-solid fa-xmark text-lg"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-mahogany-900 block">GEMINI_API_KEY</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-parchment-50 border border-parchment-300 rounded-lg px-3.5 py-2 text-xs font-mono focus:ring-2 focus:ring-mahogany-600 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="px-4 py-2 bg-mahogany-700 text-white rounded-lg text-xs font-semibold hover:bg-mahogany-800"
+                  >
+                    Save & Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
