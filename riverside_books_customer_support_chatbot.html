@@ -268,11 +268,13 @@
       ],
 
       merchandise: [
-        { id: 1, item_name: "Riverside Books Canvas Tote Bag", category: "Accessories", price: 16.00, stock_quantity: 25 },
+        { id: 1, item_name: "Riverside Books Canvas ToteBag", category: "Accessories", price: 16.00, stock_quantity: 25 },
         { id: 2, item_name: "Brass Leaf Botanical Bookmark", category: "Stationery", price: 8.50, stock_quantity: 40 },
         { id: 3, item_name: "Ceramic Waterfront Mug (12oz)", category: "Drinkware", price: 14.00, stock_quantity: 15 },
         { id: 4, item_name: "Linen Hardcover Reading Journal", category: "Stationery", price: 22.00, stock_quantity: 10 }
       ],
+
+      reservations: [],
 
       social_accounts: [
         { platform: "Instagram", handle: "@riversidebooks_pdx", url: "https://instagram.com/riversidebooks_pdx" },
@@ -297,21 +299,35 @@
     const TOOL_DECLARATIONS = [
       {
         name: "advanced_book_search",
-        description: "Precise multi-criteria search for books. Use this whenever a user asks about books, inventory, prices, publication years, genres, or stock levels. Pass explicit genre filter in the 'genre' parameter when specified by the user.",
+        description: "Precise multi-criteria search for books. Use whenever a user asks about books, inventory, prices, publication years, genres, or stock levels.",
         parameters: {
           type: "OBJECT",
           properties: {
             query: { type: "STRING", description: "Keywords related to title, author, or general keywords." },
             max_price: { type: "NUMBER", description: "Maximum price limit." },
             min_price: { type: "NUMBER", description: "Minimum price limit." },
-            genre: { type: "STRING", description: "Specific genre filter (e.g., 'Literary Fiction', 'Fantasy', 'Cookbook', 'Poetry', 'Mystery / Thriller', 'Historical Fiction', 'Nature & Science', 'Children\\'s / YA', 'Philosophy & Self-Help')." },
-            published_year: { type: "NUMBER", description: "Exact publication year if requested." },
+            genre: { type: "STRING", description: "Specific genre filter." },
+            published_year: { type: "NUMBER", description: "Exact publication year." },
             published_before: { type: "NUMBER", description: "Upper bound publication year." },
             published_after: { type: "NUMBER", description: "Lower bound publication year." },
             stock_status: { type: "STRING", enum: ["in_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter." },
-            sort_by: { type: "STRING", description: "Sort criteria: 'price_asc', 'price_desc', 'year_desc', 'year_asc', 'stock_asc', 'title'." },
+            sort_by: { type: "STRING", description: "Sort criteria: 'price_asc', 'price_desc', 'year_desc', 'year_asc', 'title'." },
             limit: { type: "NUMBER", description: "Maximum number of results to return." }
           }
+        }
+      },
+      {
+        name: "reserve_book_copy",
+        description: "Reserve a copy or place a pre-order for a book on behalf of the customer. Use this when a customer asks to hold, reserve, or pre-order a title, especially if it is out of stock or featured in an upcoming author event.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            book_title: { type: "STRING", description: "Title of the book to reserve." },
+            customer_name: { type: "STRING", description: "Customer's name for the reservation record." },
+            email_or_phone: { type: "STRING", description: "Customer contact info for pickup notifications." },
+            quantity: { type: "NUMBER", description: "Number of copies to reserve (default 1)." }
+          },
+          required: ["book_title", "customer_name"]
         }
       },
       {
@@ -382,6 +398,36 @@
       console.log(`[Database Query Executed] Tool: ${name}`, args);
       
       switch(name) {
+        case "reserve_book_copy": {
+          const bookTitleQuery = (args.book_title || "").toLowerCase().trim();
+          const bookMatch = RIVERSIDE_DATABASE.books.find(b => b.title.toLowerCase().includes(bookTitleQuery));
+          
+          const reservationId = "RES-" + Math.floor(100000 + Math.random() * 900000);
+          const quantity = args.quantity || 1;
+          const customerName = args.customer_name || "Valued Customer";
+          const contact = args.email_or_phone || "(503) 555-0192";
+
+          const newReservation = {
+            id: reservationId,
+            book_title: bookMatch ? bookMatch.title : args.book_title,
+            book_id: bookMatch ? bookMatch.id : null,
+            customer_name: customerName,
+            contact: contact,
+            quantity: quantity,
+            timestamp: new Date().toLocaleString(),
+            status: bookMatch && bookMatch.stock_quantity > 0 ? "Held for Pickup" : "Pre-order Queued (Restocking Soon)"
+          };
+
+          RIVERSIDE_DATABASE.reservations.push(newReservation);
+
+          return {
+            success: true,
+            reservation_id: reservationId,
+            reservation_details: newReservation,
+            book_stock_status: bookMatch ? getInventoryStatus(bookMatch) : { stock_quantity: 0, stock_level: "Out of Stock" }
+          };
+        }
+
         case "advanced_book_search": {
           let results = RIVERSIDE_DATABASE.books.map(getInventoryStatus);
 
@@ -406,11 +452,6 @@
             results = results.filter(b => b.price >= args.min_price);
           }
 
-          if (args.genre && args.genre.trim()) {
-            const g = args.genre.toLowerCase();
-            results = results.filter(b => b.genre.toLowerCase().includes(g));
-          }
-
           if (typeof args.published_year === 'number') {
             results = results.filter(b => b.published_year === args.published_year);
           }
@@ -432,8 +473,7 @@
             if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
             else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
             else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
-            else if (args.sort_by === 'year_asc') results.sort((a,b) => b.published_year - a.published_year);
-            else if (args.sort_by === 'stock_asc') results.sort((a,b) => b.stock_quantity - b.stock_quantity);
+            else if (args.sort_by === 'year_asc') results.sort((a,b) => a.published_year - b.published_year);
             else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
           }
 
@@ -543,19 +583,34 @@
       let toolName = null;
       let toolArgs = {};
 
-      if (input.includes("hours") || input.includes("open") || input.includes("close") || input.includes("time") || input.includes("when are you open")) {
+      if (input.includes("reserve") || input.includes("hold") || input.includes("pre-order") || input.includes("preorder")) {
+        toolName = "reserve_book_copy";
+        
+        let foundTitle = "The Map of Quiet Streets";
+        for (const b of RIVERSIDE_DATABASE.books) {
+          if (input.includes(b.title.toLowerCase())) {
+            foundTitle = b.title;
+            break;
+          }
+        }
+        toolArgs = {
+          book_title: foundTitle,
+          customer_name: "Valued Customer",
+          email_or_phone: "(503) 555-0192"
+        };
+      } else if (input.includes("hours") || input.includes("open") || input.includes("close") || input.includes("time")) {
         toolName = "get_store_hours";
       } else if (input.includes("return") || input.includes("exchange") || input.includes("policy") || input.includes("refund")) {
         toolName = "get_return_policy";
       } else if (input.includes("reward") || input.includes("point") || input.includes("birthday") || input.includes("membership") || input.includes("discount")) {
         toolName = "get_rewards_info";
-      } else if (input.includes("genre") || input.includes("categories") || input.includes("what kinds of books") || input.includes("book types")) {
+      } else if (input.includes("genre") || input.includes("categories") || input.includes("what kinds of books")) {
         toolName = "get_available_genres";
-      } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email") || input.includes("where are you")) {
+      } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email")) {
         toolName = "get_about_store";
-      } else if (input.includes("event") && (input.includes("book") || input.includes("stock") || input.includes("inventory"))) {
+      } else if (input.includes("event") && (input.includes("book") || input.includes("stock"))) {
         toolName = "relational_event_books";
-      } else if ((input.includes("event") || input.includes("signing") || input.includes("club") || input.includes("workshop")) && !input.includes("book")) {
+      } else if (input.includes("event") || input.includes("signing") || input.includes("club")) {
         toolName = "get_upcoming_events";
         toolArgs = { limit: 5 };
       } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark")) {
@@ -567,9 +622,6 @@
         const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)/i);
         const extractedMaxPrice = maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined;
 
-        const minPriceMatch = input.match(/(?:over|above|more than|min|at least)\s*\$?(\d+(?:\.\d+)?)/i);
-        const extractedMinPrice = minPriceMatch ? parseFloat(minPriceMatch[1]) : undefined;
-
         const yearBeforeMatch = input.match(/(?:before|prior to|older than|earlier than|pre-?)\s*(\d{4})/i);
         let extractedYearBefore = yearBeforeMatch ? parseInt(yearBeforeMatch[1], 10) : undefined;
 
@@ -580,9 +632,9 @@
         let extractedYearExact = (!yearBeforeMatch && !yearAfterMatch && yearExactMatch) ? parseInt(yearExactMatch[1], 10) : undefined;
 
         let extractedStockStatus = undefined;
-        if (input.includes("low stock") || input.includes("running low") || input.includes("reorder")) {
+        if (input.includes("low stock") || input.includes("running low")) {
           extractedStockStatus = "low_stock";
-        } else if (input.includes("out of stock") || input.includes("sold out") || input.includes("unavailable")) {
+        } else if (input.includes("out of stock") || input.includes("sold out")) {
           extractedStockStatus = "out_of_stock";
         } else if (input.includes("in stock") || input.includes("available")) {
           extractedStockStatus = "in_stock";
@@ -601,16 +653,16 @@
           else if (input.includes("historical")) extractedGenre = "Historical Fiction";
           else if (input.includes("fantasy")) extractedGenre = "Fantasy";
           else if (input.includes("mystery") || input.includes("thriller")) extractedGenre = input.includes("mystery") ? "Mystery / Thriller" : "Thriller";
-          else if (input.includes("cookbook") || input.includes("cooking") || input.includes("baking")) extractedGenre = "Cookbook";
-          else if (input.includes("nature") || input.includes("science") || input.includes("flora")) extractedGenre = "Nature & Science";
+          else if (input.includes("cookbook") || input.includes("cooking")) extractedGenre = "Cookbook";
+          else if (input.includes("nature") || input.includes("science")) extractedGenre = "Nature & Science";
           else if (input.includes("poetry")) extractedGenre = "Poetry";
-          else if (input.includes("children") || input.includes("kids") || input.includes("ya")) extractedGenre = "Children's / YA";
-          else if (input.includes("philosophy") || input.includes("self-help") || input.includes("mindful")) extractedGenre = "Philosophy & Self-Help";
+          else if (input.includes("children") || input.includes("kids")) extractedGenre = "Children's / YA";
+          else if (input.includes("philosophy") || input.includes("self-help")) extractedGenre = "Philosophy & Self-Help";
         }
 
         let cleanQuery = input
           .replace(/(?:under|below|less than|max|cheaper than|over|above|more than|min|at least|\$)\s*\$?(\d+(?:\.\d+)?)/gi, '')
-          .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from year|year|pre-?|post-?)\s*(\d{4})/gi, '')
+          .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from year|year)\s*(\d{4})/gi, '')
           .replace(/\b(20\d{2}|19\d{2})\b/g, '')
           .replace(new RegExp(knownGenres.join('|'), 'gi'), '')
           .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category)\b/gi, '')
@@ -623,7 +675,6 @@
           query: finalQuery,
           genre: extractedGenre,
           max_price: extractedMaxPrice,
-          min_price: extractedMinPrice,
           published_year: extractedYearExact,
           published_before: extractedYearBefore,
           published_after: extractedYearAfter,
@@ -634,32 +685,21 @@
       const dbData = executeDatabaseTool(toolName, toolArgs);
       let responseText = "";
 
-      if (toolName === "advanced_book_search") {
+      if (toolName === "reserve_book_copy") {
+        responseText = `✅ **Reservation Confirmed!**\n\n• **Reservation ID:** ${dbData.reservation_id}\n• **Book:** *${dbData.reservation_details.book_title}*\n• **Status:** ${dbData.reservation_details.status}\n\nWe will notify you at pickup or when your restock arrives. You can also view this in the DB Explorer under Reservations!`;
+      } else if (toolName === "advanced_book_search") {
         if (dbData.results && dbData.results.length > 0) {
           const list = dbData.results.map(b => 
             `• **${b.title}** by ${b.author} - $${b.price.toFixed(2)} (${b.genre}, ${b.published_year}) [**${b.stock_quantity} in stock**]`
           ).join("\n");
           
-          let prefix = "Here are matching books from our database:";
-          if (toolArgs.genre) {
-            prefix = `Here are books in the **${toolArgs.genre}** genre:`;
-          } else if (toolArgs.published_year) {
-            prefix = `Here are books published in **${toolArgs.published_year}**:`;
-          } else if (toolArgs.published_before) {
-            prefix = `Here are books published in or before **${toolArgs.published_before}**:`;
-          } else if (toolArgs.published_after) {
-            prefix = `Here are books published in or after **${toolArgs.published_after}**:`;
-          } else if (toolArgs.max_price) {
-            prefix = `Here are books priced at or under **$${toolArgs.max_price.toFixed(2)}**:`;
-          }
-
-          responseText = `${prefix}\n\n${list}\n\nFeel free to ask us to hold any title at (503) 555-0192!`;
+          responseText = `Here are matching books from our database:\n\n${list}\n\nWant to place a hold or pre-order any title? Just ask!`;
         } else {
-          responseText = `I searched our inventory using your criteria, but found no matching books. Try adjusting your genre, year, price limit, or search terms! You can also call us at (503) 555-0192 for custom orders.`;
+          responseText = `I searched our inventory using your criteria, but found no matching books. You can call us at (503) 555-0192 for custom orders.`;
         }
       } else if (toolName === "get_available_genres") {
         const genreList = dbData.genres.map(g => `• ${g}`).join("\n");
-        responseText = `Here are the book genres we currently curate at Riverside Books:\n\n${genreList}\n\nFeel free to ask for books in any of these genres!`;
+        responseText = `Here are the book genres we currently curate at Riverside Books:\n\n${genreList}`;
       } else if (toolName === "relational_event_books") {
         const eventsList = dbData.events_with_inventory.map(e => {
           const bookInfo = e.book_details 
@@ -668,17 +708,6 @@
           return `• **${e.title}**\n  📆 Date: ${e.event_date} (${e.time})\n  ${bookInfo}`;
         }).join("\n\n");
         responseText = `Here are our upcoming bookstore events alongside live stock status for featured books:\n\n${eventsList}`;
-      } else if (toolName === "search_books") {
-        if (dbData.results && dbData.results.length > 0) {
-          const b = dbData.results[0];
-          if (b.stock_quantity > 0) {
-            responseText = `Yes! We currently have **${b.stock_quantity} copy${b.stock_quantity > 1 ? 'ies' : ''}** of *${b.title}* by ${b.author} in stock. It is priced at $${b.price.toFixed(2)} (${b.genre}, published ${b.published_year}).`;
-          } else {
-            responseText = `We carry *${b.title}* by ${b.author} ($${b.price.toFixed(2)}), but it is currently **out of stock**.`;
-          }
-        } else {
-          responseText = `I searched our system for "${toolArgs.query}", but I couldn't find a matching title or author.`;
-        }
       } else if (toolName === "get_store_hours") {
         responseText = `Our store hours at Riverside Books are:\n\n📅 **${dbData.hours}**`;
       } else if (toolName === "get_return_policy") {
@@ -705,83 +734,65 @@
       };
     }
 
-    const SYSTEM_INSTRUCTION = `You are a helpful, warm customer support assistant for Riverside Books, an independent bookstore in Portland, Oregon. 
+    const SYSTEM_INSTRUCTION = `You are a helpful, warm customer support assistant for Riverside Books in Portland, Oregon. 
 Your goal is to answer customer questions strictly using live database tools.
-CRITICAL INSTRUCTION FOR GENRE & YEAR QUERIES: When a user asks for books in a specific genre (e.g., "show me fantasy books", "cookbook", "poetry", "literary fiction"), you MUST populate the 'genre' parameter in 'advanced_book_search'. When a user asks for books published in a specific year, populate 'published_year'.
-Always use advanced_book_search or specific tool calls before answering. Never make up book availability, stock counts, prices, or store policies.`;
+CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially if out of stock or featured in an event), you MUST invoke the 'reserve_book_copy' tool function.`;
 
     const SEARCH_EXAMPLE_CATEGORIES = [
       {
-        category: "1. Genre & Category Filtering",
+        category: "1. Reservations & Pre-Orders (NEW)",
+        icon: "fa-bookmark",
+        phrases: [
+          "Please reserve a copy of The Map of Quiet Streets for me",
+          "Can I pre-order Shadows Over Cascadia?",
+          "Hold a copy of Echoes of the River for Jane Doe",
+          "Can I reserve 2 copies of The Whispering Arbor?"
+        ]
+      },
+      {
+        category: "2. Genre & Category Filtering",
         icon: "fa-feather",
         phrases: [
           "Show me fantasy books",
           "What cookbooks do you carry?",
           "Find poetry books",
-          "Show me historical fiction",
-          "What genres do you have?"
+          "Show me historical fiction"
         ]
       },
       {
-        category: "2. Publication Year & Date Filtering",
+        category: "3. Publication Year Filtering",
         icon: "fa-calendar-days",
         phrases: [
           "Find books published in the year 2021",
           "Show me books published in 2023",
-          "What books do you have published before 2022?",
-          "Find titles published since 2024",
-          "Are there any books from 2020?"
+          "What books do you have published before 2022?"
         ]
       },
       {
-        category: "2. Price & Budget Filtering",
+        category: "4. Price & Budget Filtering",
         icon: "fa-tag",
         phrases: [
           "Find books under $20",
           "Show me books cheaper than $18",
-          "What books cost over $25?",
-          "What is the most expensive book in store?",
-          "Show me items under $15"
+          "What books cost over $25?"
         ]
       },
       {
-        category: "3. Inventory & Stock Status",
+        category: "5. Inventory & Stock Status",
         icon: "fa-boxes-stacked",
         phrases: [
           "Show low stock books",
           "Which books are out of stock?",
-          "Do you have copies of The Map of Quiet Streets in stock?",
           "List all available books"
         ]
       },
       {
-        category: "4. Genre & Author Specifics",
-        icon: "fa-feather",
-        phrases: [
-          "Show me literary fiction books",
-          "Do you have any cookbooks?",
-          "Find books by Dr. Robert Thorne",
-          "What poetry books do you carry?"
-        ]
-      },
-      {
-        category: "5. Store Policies, Hours & Rewards",
+        category: "6. Store Policies & Hours",
         icon: "fa-store",
         phrases: [
           "What are your store hours?",
           "What is your return policy?",
-          "How does the Riverside Readers rewards program work?",
-          "Do you offer birthday discounts?",
-          "Where are you located?"
-        ]
-      },
-      {
-        category: "6. Events & Relational Data",
-        icon: "fa-calendar-star",
-        phrases: [
-          "Which books have upcoming author events?",
-          "What events are happening in September 2026?",
-          "Tell me about the kids storytime event"
+          "How does the Riverside Readers rewards program work?"
         ]
       }
     ];
@@ -791,7 +802,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
         {
           id: 1,
           sender: 'bot',
-          text: "Welcome to Riverside Books! 📚 I can help you check book inventory stock, store hours, return policies, or filter books by price and publication year. How can I assist you today?",
+          text: "Welcome to Riverside Books! 📚 I can help you check inventory, reserve copies, pre-order out-of-stock titles, or check store hours. How can I assist you today?",
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -805,13 +816,6 @@ Always use advanced_book_search or specific tool calls before answering. Never m
       const [isDbExplorerOpen, setIsDbExplorerOpen] = React.useState(false);
       const [isExamplesModalOpen, setIsExamplesModalOpen] = React.useState(false);
       const [activeDbTab, setActiveDbTab] = React.useState('books');
-
-      const [qbTable, setQbTable] = React.useState('books');
-      const [qbMaxPrice, setQbMaxPrice] = React.useState('');
-      const [qbStockFilter, setQbStockFilter] = React.useState('all');
-      const [qbSortBy, setQbSortBy] = React.useState('none');
-      const [qbCustomKeyword, setQbCustomKeyword] = React.useState('');
-      const [qbResults, setQbResults] = React.useState(null);
 
       const messagesEndRef = React.useRef(null);
 
@@ -961,7 +965,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
               {
                 id: Date.now() + 1,
                 sender: 'bot',
-                text: `*(Notice: Gemini API request encountered an issue. Automatically answered via SQLite Local Database Mode)*\n\n${fallbackReply.text}`,
+                text: `*(Notice: Automatically answered via SQLite Local Database Mode)*\n\n${fallbackReply.text}`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 toolInfo: fallbackReply.toolCalled
               }
@@ -972,7 +976,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
               {
                 id: Date.now() + 1,
                 sender: 'bot',
-                text: "I experienced a temporary glitch connecting to our system. Please try again, or feel free to call us directly at (503) 555-0192!",
+                text: "I experienced a temporary glitch. Please call us directly at (503) 555-0192!",
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               }
             ]);
@@ -1016,34 +1020,27 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                 <button
                   onClick={() => setQueryMode('gemini_flash')}
                   className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 ${
-                    queryMode === 'gemini_flash' 
-                      ? 'bg-amber-600 text-white shadow-sm' 
-                      : 'text-parchment-300 hover:text-white'
+                    queryMode === 'gemini_flash' ? 'bg-amber-600 text-white shadow-sm' : 'text-parchment-300 hover:text-white'
                   }`}
-                  title="Use Google Gemini 1.5 Flash API with Native Function Calling"
                 >
                   <i className="fa-solid fa-wand-magic-sparkles text-amber-200"></i>
-                  <span>Gemini Flash Mode</span>
+                  <span>Gemini Flash</span>
                 </button>
 
                 <button
                   onClick={() => setQueryMode('sqlite_local')}
                   className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 ${
-                    queryMode === 'sqlite_local' 
-                      ? 'bg-mahogany-700 text-white shadow-sm' 
-                      : 'text-parchment-300 hover:text-white'
+                    queryMode === 'sqlite_local' ? 'bg-mahogany-700 text-white shadow-sm' : 'text-parchment-300 hover:text-white'
                   }`}
-                  title="Use Built-in SQLite Simulated Local Router"
                 >
                   <i className="fa-solid fa-database text-amber-400"></i>
-                  <span>SQLite Local Mode</span>
+                  <span>SQLite Local</span>
                 </button>
               </div>
 
               <button
                 onClick={() => setIsExamplesModalOpen(true)}
-                className="px-3 py-2 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded-xl border border-amber-500/40 transition flex items-center gap-1.5 shadow-sm font-semibold"
-                title="View Comprehensive Search Examples"
+                className="px-3 py-2 text-xs bg-amber-700 hover:bg-amber-600 text-white rounded-xl border border-amber-500/40 transition flex items-center gap-1.5 font-semibold"
               >
                 <i className="fa-solid fa-list-check"></i>
                 <span className="hidden md:inline">Query Examples</span>
@@ -1051,8 +1048,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
 
               <button
                 onClick={() => setIsDbExplorerOpen(true)}
-                className="px-3 py-2 text-xs bg-mahogany-800 hover:bg-mahogany-700 text-parchment-200 rounded-xl border border-parchment-400/20 transition flex items-center gap-1.5 shadow-sm"
-                title="View Database Tables"
+                className="px-3 py-2 text-xs bg-mahogany-800 hover:bg-mahogany-700 text-parchment-200 rounded-xl border border-parchment-400/20 transition flex items-center gap-1.5"
               >
                 <i className="fa-solid fa-database text-amber-400"></i>
                 <span className="hidden md:inline font-medium">DB Explorer</span>
@@ -1060,7 +1056,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
 
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-2.5 text-parchment-300 hover:text-parchment-100 hover:bg-mahogany-800 rounded-xl transition relative"
+                className="p-2.5 text-parchment-300 hover:text-parchment-100 hover:bg-mahogany-800 rounded-xl transition"
                 title="API Settings"
               >
                 <i className="fa-solid fa-sliders text-base"></i>
@@ -1085,34 +1081,18 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                 </div>
                 <div className="space-y-1 flex-1">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <p className="font-semibold font-serif text-mahogany-900">Riverside Books Customer Support Assistant</p>
-                    <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                      queryMode === 'gemini_flash' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-mahogany-100 text-mahogany-900 border border-mahogany-200'
-                    }`}>
-                      Mode Active: {queryMode === 'gemini_flash' ? '⚡ Gemini 1.5 Flash Querying' : '🗄️ SQLite Local Router'}
+                    <p className="font-semibold font-serif text-mahogany-900">New Feature: Book Holds & Pre-Order Reservations</p>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      ⚡ Tool: reserve_book_copy Enabled
                     </span>
                   </div>
                   <p className="text-xs text-ink-700 leading-relaxed">
-                    Test out queries across publication years, pricing, inventory levels, store hours, and policies. Click any example below or open the full catalog!
+                    You can now ask the chatbot to hold copies or pre-order out-of-stock titles (e.g. *Shadows Over Cascadia*). Try clicking an example below!
                   </p>
                 </div>
               </div>
 
               <div className="border-t border-parchment-300/80 pt-3 mt-1 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-mahogany-900 flex items-center gap-1.5">
-                    <i className="fa-solid fa-wand-magic-sparkles text-amber-700"></i>
-                    <span>Quick-Start Formatting & Search Examples:</span>
-                  </p>
-                  <button
-                    onClick={() => setIsExamplesModalOpen(true)}
-                    className="text-xs text-mahogany-700 hover:text-mahogany-900 font-semibold underline flex items-center gap-1"
-                  >
-                    <span>View All Categories</span>
-                    <i className="fa-solid fa-arrow-right text-[10px]"></i>
-                  </button>
-                </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
                   {SEARCH_EXAMPLE_CATEGORIES.slice(0, 3).map((cat, idx) => (
                     <div key={idx} className="bg-white/90 p-2.5 rounded-lg border border-parchment-300 shadow-2xs space-y-1.5">
@@ -1165,7 +1145,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                       <div className="mb-2.5 pb-2 border-b border-parchment-200 text-xs text-amber-900 bg-amber-50/70 p-2 rounded-md font-mono flex items-center gap-2">
                         <i className="fa-solid fa-bolt text-amber-600"></i>
                         <span>
-                          <strong>Tool Queried ({queryMode === 'gemini_flash' ? 'Gemini Flash' : 'SQLite'}):</strong> {msg.toolInfo.name}({JSON.stringify(msg.toolInfo.args)})
+                          <strong>Tool Executed:</strong> {msg.toolInfo.name}({JSON.stringify(msg.toolInfo.args)})
                         </span>
                       </div>
                     )}
@@ -1197,7 +1177,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                       <span className="w-2 h-2 rounded-full bg-mahogany-600 typing-dot"></span>
                     </div>
                     <span className="text-xs font-serif italic text-mahogany-800">
-                      Gemini 1.5 Flash parsing year & parameter filters...
+                      Processing reservation and inventory records...
                     </span>
                   </div>
                 </div>
@@ -1219,7 +1199,7 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask anything (e.g., 'Find books published in the year 2021')"
+                placeholder="Ask or request a reservation (e.g., 'Reserve Shadows Over Cascadia')"
                 disabled={isLoading}
                 className="flex-1 bg-parchment-50 border border-parchment-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mahogany-600/50 focus:border-mahogany-600 text-ink-900 placeholder-parchment-400 disabled:opacity-50"
               />
@@ -1232,31 +1212,20 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                 <i className="fa-solid fa-paper-plane text-xs"></i>
               </button>
             </form>
-            <div className="mt-2 text-center text-[11px] text-parchment-400 font-medium">
-              Active Engine: {queryMode === 'gemini_flash' ? 'Google Gemini 1.5 Flash Tool Use' : 'SQLite Local Regex Simulator'}
-            </div>
           </footer>
 
           {isExamplesModalOpen && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 animate-fadeIn">
               <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-parchment-300 overflow-hidden">
-                
                 <div className="bg-mahogany-900 text-parchment-100 px-6 py-4 flex items-center justify-between border-b border-mahogany-700">
                   <div className="flex items-center gap-2.5">
                     <i className="fa-solid fa-list-check text-amber-400 text-lg"></i>
-                    <div>
-                      <h2 className="font-serif font-bold text-lg text-parchment-100">Comprehensive Search & Query Examples</h2>
-                      <p className="text-xs text-parchment-300">Click any example below to instantly query the chatbot assistant!</p>
-                    </div>
+                    <h2 className="font-serif font-bold text-lg text-parchment-100">Query Examples & Reservation Prompts</h2>
                   </div>
-                  <button
-                    onClick={() => setIsExamplesModalOpen(false)}
-                    className="text-parchment-300 hover:text-white p-1 rounded-lg transition"
-                  >
+                  <button onClick={() => setIsExamplesModalOpen(false)} className="text-parchment-300 hover:text-white">
                     <i className="fa-solid fa-xmark text-lg"></i>
                   </button>
                 </div>
-
                 <div className="flex-1 overflow-auto p-4 sm:p-6 bg-parchment-50 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {SEARCH_EXAMPLE_CATEGORIES.map((cat, idx) => (
@@ -1282,13 +1251,8 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                     ))}
                   </div>
                 </div>
-
-                <div className="p-3 sm:p-4 bg-parchment-100 border-t border-parchment-300 flex justify-between items-center">
-                  <span className="text-xs text-ink-700 italic">Tip: You can combine years, prices, and genres in your own custom sentences!</span>
-                  <button
-                    onClick={() => setIsExamplesModalOpen(false)}
-                    className="px-4 py-2 bg-mahogany-700 hover:bg-mahogany-800 text-white rounded-lg text-xs font-semibold"
-                  >
+                <div className="p-3 bg-parchment-100 border-t border-parchment-300 text-right">
+                  <button onClick={() => setIsExamplesModalOpen(false)} className="px-4 py-2 bg-mahogany-700 text-white rounded-lg text-xs font-semibold">
                     Close Catalog
                   </button>
                 </div>
@@ -1299,36 +1263,28 @@ Always use advanced_book_search or specific tool calls before answering. Never m
           {isDbExplorerOpen && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 animate-fadeIn">
               <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-parchment-300 overflow-hidden">
-                
                 <div className="bg-mahogany-900 text-parchment-100 px-6 py-4 flex items-center justify-between border-b border-mahogany-700">
                   <div className="flex items-center gap-2.5">
                     <i className="fa-solid fa-database text-amber-400 text-lg"></i>
                     <h2 className="font-serif font-bold text-lg text-parchment-100">Riverside Books Database Explorer</h2>
                   </div>
-                  <button
-                    onClick={() => setIsDbExplorerOpen(false)}
-                    className="text-parchment-300 hover:text-white p-1 rounded-lg transition"
-                  >
+                  <button onClick={() => setIsDbExplorerOpen(false)} className="text-parchment-300 hover:text-white">
                     <i className="fa-solid fa-xmark text-lg"></i>
                   </button>
                 </div>
 
                 <div className="flex bg-parchment-100 border-b border-parchment-300 overflow-x-auto p-2 gap-1">
                   {[
-                    { id: 'books', label: 'books & inventory_status', icon: 'fa-book' },
-                    { id: 'query_builder', label: 'SQL & Custom Query Console', icon: 'fa-terminal' },
-                    { id: 'store_info', label: 'store_info', icon: 'fa-store' },
+                    { id: 'books', label: 'books', icon: 'fa-book' },
+                    { id: 'reservations', label: `reservations (${RIVERSIDE_DATABASE.reservations.length})`, icon: 'fa-bookmark' },
                     { id: 'events', label: 'events', icon: 'fa-calendar-days' },
-                    { id: 'merchandise', label: 'merchandise', icon: 'fa-gift' },
-                    { id: 'social_accounts', label: 'social_accounts', icon: 'fa-share-nodes' }
+                    { id: 'merchandise', label: 'merchandise', icon: 'fa-gift' }
                   ].map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveDbTab(tab.id)}
                       className={`px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 ${
-                        activeDbTab === tab.id
-                          ? 'bg-mahogany-700 text-white shadow-2xs'
-                          : 'text-ink-700 hover:bg-parchment-200'
+                        activeDbTab === tab.id ? 'bg-mahogany-700 text-white shadow-2xs' : 'text-ink-700 hover:bg-parchment-200'
                       }`}
                     >
                       <i className={`fa-solid ${tab.icon}`}></i>
@@ -1338,169 +1294,81 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                 </div>
 
                 <div className="flex-1 overflow-auto p-4 bg-parchment-50">
-                  {activeDbTab === 'query_builder' && (
-                    <div className="space-y-4">
-                      <div className="bg-white p-4 rounded-xl border border-parchment-300 shadow-sm space-y-3">
-                        <h3 className="font-serif font-bold text-sm text-mahogany-900 flex items-center gap-2">
-                          <i className="fa-solid fa-sliders text-amber-600"></i>
-                          Interactive Visual SQL Query Builder
-                        </h3>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                          <div>
-                            <label className="block font-medium text-gray-700 mb-1">Target Table</label>
-                            <select 
-                              value={qbTable} 
-                              onChange={(e) => setQbTable(e.target.value)}
-                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
-                            >
-                              <option value="books">books (Catalog)</option>
-                              <option value="events_joined">events JOIN books</option>
-                              <option value="merchandise">merchandise</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block font-medium text-gray-700 mb-1">Max Price Limit ($)</label>
-                            <input 
-                              type="number" 
-                              placeholder="e.g. 20" 
-                              value={qbMaxPrice} 
-                              onChange={(e) => setQbMaxPrice(e.target.value)}
-                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block font-medium text-gray-700 mb-1">Stock Level Filter</label>
-                            <select 
-                              value={qbStockFilter} 
-                              onChange={(e) => setQbStockFilter(e.target.value)}
-                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
-                            >
-                              <option value="all">All Items</option>
-                              <option value="in_stock">In Stock (&gt;0)</option>
-                              <option value="low_stock">Low Stock (&lt;=2)</option>
-                              <option value="out_of_stock">Out of Stock (=0)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block font-medium text-gray-700 mb-1">Sort By Order</label>
-                            <select 
-                              value={qbSortBy} 
-                              onChange={(e) => setQbSortBy(e.target.value)}
-                              className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 font-mono"
-                            >
-                              <option value="none">Default Order</option>
-                              <option value="price_asc">Price: Low to High</option>
-                              <option value="price_desc">Price: High to Low</option>
-                              <option value="year_desc">Year: Newest First</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block font-medium text-gray-700 mb-1 text-xs">Search Keyword (Title / Author / Genre)</label>
-                          <input 
-                            type="text" 
-                            placeholder="e.g. Thorne, Fiction..." 
-                            value={qbCustomKeyword} 
-                            onChange={(e) => setQbCustomKeyword(e.target.value)}
-                            className="w-full bg-parchment-50 border border-parchment-300 rounded-lg p-2 text-xs font-mono"
-                          />
-                        </div>
-
-                        <button 
-                          onClick={() => {
-                            let toolName = "advanced_book_search";
-                            let args = {
-                              query: qbCustomKeyword,
-                              max_price: qbMaxPrice ? parseFloat(qbMaxPrice) : undefined,
-                              stock_status: qbStockFilter !== 'all' ? qbStockFilter : undefined,
-                              sort_by: qbSortBy !== 'none' ? qbSortBy : undefined
-                            };
-                            if (qbTable === 'events_joined') toolName = "relational_event_books";
-                            else if (qbTable === 'merchandise') {
-                              toolName = "search_merchandise";
-                              args = { query: qbCustomKeyword, max_price: qbMaxPrice ? parseFloat(qbMaxPrice) : undefined };
-                            }
-
-                            const result = executeDatabaseTool(toolName, args);
-                            setQbResults({ toolName, args, result });
-                          }}
-                          className="bg-mahogany-700 hover:bg-mahogany-800 text-white font-semibold text-xs px-4 py-2 rounded-lg transition flex items-center gap-2"
-                        >
-                          <i className="fa-solid fa-play"></i>
-                          <span>Execute Query</span>
-                        </button>
-                      </div>
-
-                      {qbResults && (
-                        <div className="bg-white p-4 rounded-xl border border-parchment-300 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="font-serif font-bold text-xs text-mahogany-900">Query Output Result</span>
-                            <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                              Matches Found: {qbResults.result.match_count ?? qbResults.result.joined_records ?? qbResults.result.results?.length ?? 0}
-                            </span>
-                          </div>
-                          <pre className="bg-parchment-100 text-ink-900 p-3 rounded-lg font-mono text-[11px] overflow-x-auto max-h-52 border border-parchment-200">
-                            {JSON.stringify(qbResults.result, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
+                  {activeDbTab === 'books' && (
+                    <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                      <thead>
+                        <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                          <th className="p-2.5">ID</th>
+                          <th className="p-2.5">Title</th>
+                          <th className="p-2.5">Author</th>
+                          <th className="p-2.5">Genre</th>
+                          <th className="p-2.5">Price</th>
+                          <th className="p-2.5">Stock</th>
+                          <th className="p-2.5">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-parchment-200">
+                        {RIVERSIDE_DATABASE.books.map(book => {
+                          const status = getInventoryStatus(book);
+                          return (
+                            <tr key={book.id} className="hover:bg-parchment-100">
+                              <td className="p-2.5 font-mono text-gray-500">{book.id}</td>
+                              <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
+                              <td className="p-2.5">{book.author}</td>
+                              <td className="p-2.5">{book.genre}</td>
+                              <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
+                              <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
+                              <td className="p-2.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  status.stock_level === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                                  status.stock_level === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {status.stock_level}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   )}
 
-                  {activeDbTab === 'books' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left text-ink-800 border-collapse">
-                        <thead>
-                          <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
-                            <th className="p-2.5">ID</th>
-                            <th className="p-2.5">Title</th>
-                            <th className="p-2.5">Author</th>
-                            <th className="p-2.5">Genre</th>
-                            <th className="p-2.5">Year</th>
-                            <th className="p-2.5">Price</th>
-                            <th className="p-2.5">Stock</th>
-                            <th className="p-2.5">Status View</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-parchment-200">
-                          {RIVERSIDE_DATABASE.books.map(book => {
-                            const status = getInventoryStatus(book);
-                            return (
-                              <tr key={book.id} className="hover:bg-parchment-100">
-                                <td className="p-2.5 font-mono text-gray-500">{book.id}</td>
-                                <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
-                                <td className="p-2.5">{book.author}</td>
-                                <td className="p-2.5">{book.genre}</td>
-                                <td className="p-2.5 font-mono">{book.published_year}</td>
-                                <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
-                                <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
+                  {activeDbTab === 'reservations' && (
+                    <div>
+                      {RIVERSIDE_DATABASE.reservations.length === 0 ? (
+                        <div className="text-center py-10 text-gray-500 text-xs">
+                          No reservations or pre-orders placed yet. Try asking the chatbot to reserve a book!
+                        </div>
+                      ) : (
+                        <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                          <thead>
+                            <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                              <th className="p-2.5">Res ID</th>
+                              <th className="p-2.5">Book Title</th>
+                              <th className="p-2.5">Customer</th>
+                              <th className="p-2.5">Qty</th>
+                              <th className="p-2.5">Timestamp</th>
+                              <th className="p-2.5">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-parchment-200">
+                            {RIVERSIDE_DATABASE.reservations.map(res => (
+                              <tr key={res.id} className="hover:bg-parchment-100">
+                                <td className="p-2.5 font-mono text-amber-900 font-bold">{res.id}</td>
+                                <td className="p-2.5 font-semibold text-mahogany-900">{res.book_title}</td>
+                                <td className="p-2.5">{res.customer_name}</td>
+                                <td className="p-2.5 font-mono">{res.quantity}</td>
+                                <td className="p-2.5 font-mono text-gray-500">{res.timestamp}</td>
                                 <td className="p-2.5">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                    status.stock_level === 'Out of Stock' ? 'bg-red-100 text-red-800' :
-                                    status.stock_level === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                                  }`}>
-                                    {status.stock_level}
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">
+                                    {res.status}
                                   </span>
                                 </td>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {activeDbTab === 'store_info' && (
-                    <div className="space-y-3 text-xs bg-white p-4 rounded-xl border border-parchment-300">
-                      <div><strong className="text-mahogany-900 font-serif text-sm">Store Name:</strong> {RIVERSIDE_DATABASE.store_info.store_name}</div>
-                      <div><strong className="text-mahogany-900 font-serif text-sm">Address:</strong> {RIVERSIDE_DATABASE.store_info.address}</div>
-                      <div><strong className="text-mahogany-900 font-serif text-sm">Hours:</strong> {RIVERSIDE_DATABASE.store_info.hours}</div>
-                      <div><strong className="text-mahogany-900 font-serif text-sm">Return Policy:</strong> {RIVERSIDE_DATABASE.store_info.return_policy}</div>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   )}
 
@@ -1538,24 +1406,10 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                       </tbody>
                     </table>
                   )}
-
-                  {activeDbTab === 'social_accounts' && (
-                    <div className="space-y-2 text-xs">
-                      {RIVERSIDE_DATABASE.social_accounts.map((s, idx) => (
-                        <div key={idx} className="bg-white p-3 rounded-lg border border-parchment-300 flex justify-between items-center">
-                          <span className="font-semibold text-mahogany-900">{s.platform}</span>
-                          <span className="text-amber-800 font-mono">{s.handle}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <div className="p-3 bg-parchment-100 border-t border-parchment-300 text-right">
-                  <button
-                    onClick={() => setIsDbExplorerOpen(false)}
-                    className="px-4 py-2 bg-mahogany-700 hover:bg-mahogany-800 text-white rounded-lg text-xs font-semibold"
-                  >
+                  <button onClick={() => setIsDbExplorerOpen(false)} className="px-4 py-2 bg-mahogany-700 text-white rounded-lg text-xs font-semibold">
                     Close Explorer
                   </button>
                 </div>
@@ -1575,7 +1429,6 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                     <i className="fa-solid fa-xmark text-lg"></i>
                   </button>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-mahogany-900 block">GEMINI_API_KEY</label>
                   <input
@@ -1586,12 +1439,8 @@ Always use advanced_book_search or specific tool calls before answering. Never m
                     className="w-full bg-parchment-50 border border-parchment-300 rounded-lg px-3.5 py-2 text-xs font-mono focus:ring-2 focus:ring-mahogany-600 focus:outline-none"
                   />
                 </div>
-
                 <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setIsSettingsOpen(false)}
-                    className="px-4 py-2 bg-mahogany-700 text-white rounded-lg text-xs font-semibold hover:bg-mahogany-800"
-                  >
+                  <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 bg-mahogany-700 text-white rounded-lg text-xs font-semibold hover:bg-mahogany-800">
                     Save & Close
                   </button>
                 </div>
