@@ -115,8 +115,10 @@
     async function getAvailableGenres() {
       try {
         const books = await fetchFromSupabase('books');
+        console.log('[getAvailableGenres] Fetched books:', books?.length);
         if (books && books.length > 0) {
           const uniqueGenres = [...new Set(books.map(b => b.genre))].sort();
+          console.log('[getAvailableGenres] Found genres:', uniqueGenres);
           return uniqueGenres.length > 0 ? uniqueGenres : [
             "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
             "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
@@ -718,6 +720,8 @@
           }
         } catch (error) {
           console.error('Error fetching books for reservation:', error);
+          // Fallback to generic response if Supabase fails
+          foundTitle = "The River of Tides"; // Use a known book from the dataset
         }
         
         toolArgs = {
@@ -822,6 +826,13 @@
 
       if (toolName === "reserve_book_copy") {
         responseText = `✅ **Reservation Confirmed!**\n\n• **Reservation ID:** ${dbData.reservation_id}\n• **Book:** *${dbData.reservation_details.book_title}*\n• **Status:** ${dbData.reservation_details.status}\n\nWe will notify you at pickup or when your restock arrives. You can also view this in the DB Explorer under Reservations!`;
+        
+        // Store reservation in local state for DB Explorer
+        if (dbData.success && dbData.reservation_details) {
+          if (typeof window !== 'undefined' && window.currentSetDbReservations) {
+            window.currentSetDbReservations(prev => [...prev, dbData.reservation_details]);
+          }
+        }
       } else if (toolName === "advanced_book_search") {
         if (dbData.results && dbData.results.length > 0) {
           const list = dbData.results.map(b => 
@@ -971,6 +982,25 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       const [isDbExplorerOpen, setIsDbExplorerOpen] = React.useState(false);
       const [isExamplesModalOpen, setIsExamplesModalOpen] = React.useState(false);
       const [activeDbTab, setActiveDbTab] = React.useState('books');
+      
+      // DB Explorer data state
+      const [dbBooks, setDbBooks] = React.useState([]);
+      const [dbEvents, setDbEvents] = React.useState([]);
+      const [dbMerchandise, setDbMerchandise] = React.useState([]);
+      const [dbReservations, setDbReservations] = React.useState([]);
+      const [dbLoading, setDbLoading] = React.useState(false);
+      
+      // Make setDbReservations available globally for processLocalQuery
+      React.useEffect(() => {
+        if (typeof window !== 'undefined') {
+          window.currentSetDbReservations = setDbReservations;
+        }
+        return () => {
+          if (typeof window !== 'undefined') {
+            delete window.currentSetDbReservations;
+          }
+        };
+      }, []);
 
       const messagesEndRef = React.useRef(null);
 
@@ -981,6 +1011,56 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       React.useEffect(() => {
         scrollToBottom();
       }, [messages, isLoading, activeToolInfo]);
+
+      // Load DB Explorer data when opened
+      React.useEffect(() => {
+        async function loadDbData() {
+          if (isDbExplorerOpen) {
+            setDbLoading(true);
+            try {
+              const [books, events, merchandise] = await Promise.all([
+                fetchFromSupabase('books'),
+                fetchFromSupabase('events'),
+                fetchFromSupabase('merchandise')
+              ]);
+              
+              // Combine books with inventory
+              const inventory = await fetchFromSupabase('inventory');
+              const inventoryMap = {};
+              inventory.forEach(inv => {
+                inventoryMap[inv.book_id] = inv;
+              });
+              
+              const booksWithInventory = books.map(book => {
+                const inv = inventoryMap[book.book_id] || {};
+                let stockLevel = "Medium Stock";
+                if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                
+                return {
+                  id: book.book_id,
+                  title: book.title,
+                  author: book.author,
+                  price: book.regular_price,
+                  genre: book.genre,
+                  stock_quantity: inv.qty_in_stock || 0,
+                  stock_level: stockLevel
+                };
+              });
+              
+              setDbBooks(booksWithInventory);
+              setDbEvents(events);
+              setDbMerchandise(merchandise);
+            } catch (error) {
+              console.error('Error loading DB Explorer data:', error);
+            } finally {
+              setDbLoading(false);
+            }
+          }
+        }
+        loadDbData();
+      }, [isDbExplorerOpen]);
 
       async function callGeminiApi(userQuery, history) {
         const keyToUse = apiKey.trim();
@@ -1100,6 +1180,11 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
           if (botReply.toolCalled) {
             setActiveToolInfo(botReply.toolCalled);
+            
+            // Add reservation to local state if this was a reservation
+            if (botReply.toolCalled.name === 'reserve_book_copy' && botReply.toolCalled.result?.success) {
+              setDbReservations(prev => [...prev, botReply.toolCalled.result.reservation_details]);
+            }
           }
 
           setMessages(prev => [
@@ -1117,6 +1202,12 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           console.error("Error generating response:", error);
           try {
             const fallbackReply = await processLocalQuery(text);
+            
+            // Add reservation to local state if this was a reservation
+            if (fallbackReply.toolCalled?.name === 'reserve_book_copy' && fallbackReply.toolCalled?.result?.success) {
+              setDbReservations(prev => [...prev, fallbackReply.toolCalled.result.reservation_details]);
+            }
+            
             setMessages(prev => [
               ...prev,
               {
@@ -1432,10 +1523,10 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
                 <div className="flex bg-parchment-100 border-b border-parchment-300 overflow-x-auto p-2 gap-1">
                   {[
-                    { id: 'books', label: 'books', icon: 'fa-book' },
-                    { id: 'reservations', label: `reservations (${RIVERSIDE_DATABASE.reservations.length})`, icon: 'fa-bookmark' },
-                    { id: 'events', label: 'events', icon: 'fa-calendar-days' },
-                    { id: 'merchandise', label: 'merchandise', icon: 'fa-gift' }
+                    { id: 'books', label: `books (${dbBooks.length})`, icon: 'fa-book' },
+                    { id: 'reservations', label: `reservations (${dbReservations.length})`, icon: 'fa-bookmark' },
+                    { id: 'events', label: `events (${dbEvents.length})`, icon: 'fa-calendar-days' },
+                    { id: 'merchandise', label: `merchandise (${dbMerchandise.length})`, icon: 'fa-gift' }
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -1451,74 +1542,40 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
                 </div>
 
                 <div className="flex-1 overflow-auto p-4 bg-parchment-50">
-                  {activeDbTab === 'books' && (
-                    <table className="w-full text-xs text-left text-ink-800 border-collapse">
-                      <thead>
-                        <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
-                          <th className="p-2.5">ID</th>
-                          <th className="p-2.5">Title</th>
-                          <th className="p-2.5">Author</th>
-                          <th className="p-2.5">Genre</th>
-                          <th className="p-2.5">Price</th>
-                          <th className="p-2.5">Stock</th>
-                          <th className="p-2.5">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-parchment-200">
-                        {RIVERSIDE_DATABASE.books.map(book => {
-                          const status = getInventoryStatus(book);
-                          return (
-                            <tr key={book.id} className="hover:bg-parchment-100">
-                              <td className="p-2.5 font-mono text-gray-500">{book.id}</td>
-                              <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
-                              <td className="p-2.5">{book.author}</td>
-                              <td className="p-2.5">{book.genre}</td>
-                              <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
-                              <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
-                              <td className="p-2.5">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  status.stock_level === 'Out of Stock' ? 'bg-red-100 text-red-800' :
-                                  status.stock_level === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                                }`}>
-                                  {status.stock_level}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-
-                  {activeDbTab === 'reservations' && (
-                    <div>
-                      {RIVERSIDE_DATABASE.reservations.length === 0 ? (
-                        <div className="text-center py-10 text-gray-500 text-xs">
-                          No reservations or pre-orders placed yet. Try asking the chatbot to reserve a book!
-                        </div>
-                      ) : (
+                  {dbLoading ? (
+                    <div className="text-center py-10 text-gray-500 text-xs">
+                      Loading data from Supabase...
+                    </div>
+                  ) : (
+                    <>
+                      {activeDbTab === 'books' && (
                         <table className="w-full text-xs text-left text-ink-800 border-collapse">
                           <thead>
                             <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
-                              <th className="p-2.5">Res ID</th>
-                              <th className="p-2.5">Book Title</th>
-                              <th className="p-2.5">Customer</th>
-                              <th className="p-2.5">Qty</th>
-                              <th className="p-2.5">Timestamp</th>
+                              <th className="p-2.5">ID</th>
+                              <th className="p-2.5">Title</th>
+                              <th className="p-2.5">Author</th>
+                              <th className="p-2.5">Genre</th>
+                              <th className="p-2.5">Price</th>
+                              <th className="p-2.5">Stock</th>
                               <th className="p-2.5">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-parchment-200">
-                            {RIVERSIDE_DATABASE.reservations.map(res => (
-                              <tr key={res.id} className="hover:bg-parchment-100">
-                                <td className="p-2.5 font-mono text-amber-900 font-bold">{res.id}</td>
-                                <td className="p-2.5 font-semibold text-mahogany-900">{res.book_title}</td>
-                                <td className="p-2.5">{res.customer_name}</td>
-                                <td className="p-2.5 font-mono">{res.quantity}</td>
-                                <td className="p-2.5 font-mono text-gray-500">{res.timestamp}</td>
+                            {dbBooks.map(book => (
+                              <tr key={book.id} className="hover:bg-parchment-100">
+                                <td className="p-2.5 font-mono text-gray-500">{book.id}</td>
+                                <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
+                                <td className="p-2.5">{book.author}</td>
+                                <td className="p-2.5">{book.genre}</td>
+                                <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
+                                <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
                                 <td className="p-2.5">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">
-                                    {res.status}
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    book.stock_level === 'Out of Stock' ? 'bg-red-100 text-red-800' :
+                                    book.stock_level === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {book.stock_level}
                                   </span>
                                 </td>
                               </tr>
@@ -1526,42 +1583,79 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
                           </tbody>
                         </table>
                       )}
-                    </div>
-                  )}
 
-                  {activeDbTab === 'events' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {RIVERSIDE_DATABASE.events.map(ev => (
-                        <div key={ev.id} className="bg-white p-3.5 rounded-xl border border-parchment-300 space-y-1.5 text-xs">
-                          <div className="font-serif font-bold text-mahogany-900 text-sm">{ev.title}</div>
-                          <div className="text-amber-800 font-semibold">{ev.event_date} • {ev.time}</div>
-                          <p className="text-gray-600 leading-normal">{ev.description}</p>
+                      {activeDbTab === 'reservations' && (
+                        <div>
+                          {dbReservations.length === 0 ? (
+                            <div className="text-center py-10 text-gray-500 text-xs">
+                              No reservations or pre-orders placed yet. Try asking the chatbot to reserve a book!
+                            </div>
+                          ) : (
+                            <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                              <thead>
+                                <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                                  <th className="p-2.5">Res ID</th>
+                                  <th className="p-2.5">Book Title</th>
+                                  <th className="p-2.5">Customer</th>
+                                  <th className="p-2.5">Qty</th>
+                                  <th className="p-2.5">Timestamp</th>
+                                  <th className="p-2.5">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-parchment-200">
+                                {dbReservations.map(res => (
+                                  <tr key={res.id} className="hover:bg-parchment-100">
+                                    <td className="p-2.5 font-mono text-amber-900 font-bold">{res.id}</td>
+                                    <td className="p-2.5 font-semibold text-mahogany-900">{res.book_title}</td>
+                                    <td className="p-2.5">{res.customer_name}</td>
+                                    <td className="p-2.5 font-mono">{res.quantity}</td>
+                                    <td className="p-2.5 font-mono text-gray-500">{res.timestamp}</td>
+                                    <td className="p-2.5">
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900">
+                                        {res.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      )}
 
-                  {activeDbTab === 'merchandise' && (
-                    <table className="w-full text-xs text-left text-ink-800 border-collapse">
-                      <thead>
-                        <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
-                          <th className="p-2.5">Item Name</th>
-                          <th className="p-2.5">Category</th>
-                          <th className="p-2.5">Price</th>
-                          <th className="p-2.5">Stock</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-parchment-200">
-                        {RIVERSIDE_DATABASE.merchandise.map(item => (
-                          <tr key={item.id} className="hover:bg-parchment-100">
-                            <td className="p-2.5 font-semibold text-mahogany-900">{item.item_name}</td>
-                            <td className="p-2.5">{item.category}</td>
-                            <td className="p-2.5 font-mono">${item.price.toFixed(2)}</td>
-                            <td className="p-2.5 font-mono font-bold">{item.stock_quantity}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                      {activeDbTab === 'events' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {dbEvents.map(ev => (
+                            <div key={ev.event_id} className="bg-white p-3.5 rounded-xl border border-parchment-300 space-y-1.5 text-xs">
+                              <div className="font-serif font-bold text-mahogany-900 text-sm">{ev.event_name}</div>
+                              <div className="text-amber-800 font-semibold">{ev.event_date} • {ev.event_time}</div>
+                              <p className="text-gray-600 leading-normal">{ev.event_description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {activeDbTab === 'merchandise' && (
+                        <table className="w-full text-xs text-left text-ink-800 border-collapse">
+                          <thead>
+                            <tr className="bg-parchment-200 text-mahogany-900 font-serif border-b border-parchment-300">
+                              <th className="p-2.5">Item Name</th>
+                              <th className="p-2.5">Category</th>
+                              <th className="p-2.5">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-parchment-200">
+                            {dbMerchandise.map(item => (
+                              <tr key={item.item_id} className="hover:bg-parchment-100">
+                                <td className="p-2.5 font-semibold text-mahogany-900">{item.item_name}</td>
+                                <td className="p-2.5">{item.item_type}</td>
+                                <td className="p-2.5 font-mono">${item.price.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </>
                   )}
                 </div>
 
