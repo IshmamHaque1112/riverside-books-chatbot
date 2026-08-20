@@ -12,6 +12,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="/book-search-normalization.js"></script>
   
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -155,12 +156,14 @@
       for (const tableName of tableNames) {
         let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=${select}`;
         
-        // Add filters
-        Object.entries(filters).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            url += `&${key}=eq.${encodeURIComponent(value)}`;
-          }
-        });
+      // Add filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            const operator = typeof value === 'object' ? (value.operator || 'eq') : 'eq';
+            const filterValue = typeof value === 'object' ? value.value : value;
+            url += `&${key}=${operator}.${encodeURIComponent(filterValue)}`;
+        }
+      });
         
         // Add ordering
         if (orderBy) {
@@ -249,11 +252,12 @@
     const TOOL_DECLARATIONS = [
       {
         name: "advanced_book_search",
-        description: "Precise multi-criteria search for books. Use when user needs filtering by multiple criteria like genre, price range, year, or stock status. For simple title/author searches, use search_books instead.",
+        description: "Precise multi-criteria search for books. Use when user needs filtering by genre, price range, year, stock status, or title prefix. For simple title/author searches, use search_books instead.",
         parameters: {
           type: "OBJECT",
           properties: {
             query: { type: "STRING", description: "Title or author keywords ONLY. Do NOT include genre names, stock status, or other structured filters here." },
+            title_starts_with: { type: "STRING", description: "A letter or title prefix. Use for requests such as 'books starting with B'. Do not put this phrase in query." },
             max_price: { type: "NUMBER", description: "Maximum price limit." },
             min_price: { type: "NUMBER", description: "Minimum price limit." },
             genre: { type: "STRING", description: "Exact genre name from available genres. Must match one of: Literary Fiction, Historical Fiction, Fantasy, Science Fiction, Mystery, Thriller, Romance, Cookbook, Nature, History, Poetry, Children's, Memoir, Essay Collection" },
@@ -400,8 +404,13 @@
             try {
               console.log('[advanced_book_search] Starting search with args:', args);
               
-              // Fetch books
-              const books = await fetchFromSupabase('books');
+              // Let Supabase filter title prefixes before returning the catalog.
+              const titlePrefix = typeof args.title_starts_with === 'string'
+                ? args.title_starts_with.trim()
+                : '';
+              const books = await fetchFromSupabase('books', {
+                filters: titlePrefix ? { title: { operator: 'ilike', value: `${titlePrefix}*` } } : {}
+              });
               console.log('[advanced_book_search] Books fetched:', books?.length);
               
               if (!books || books.length === 0) {
@@ -460,6 +469,12 @@
                   b.author.toLowerCase().includes(q) || 
                   b.genre.toLowerCase().includes(q)
                 );
+              }
+
+              // Keep the same behavior if this tool is used with a non-Supabase data source.
+              if (titlePrefix) {
+                const normalizedPrefix = titlePrefix.toLowerCase();
+                results = results.filter(b => b.title.toLowerCase().startsWith(normalizedPrefix));
               }
 
               if (typeof args.max_price === 'number') {
@@ -794,6 +809,8 @@
       } else {
         toolName = "advanced_book_search";
 
+        const extractedTitlePrefix = BookSearchNormalization.extractTitlePrefix(input);
+
         const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)/i);
         const extractedMaxPrice = maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined;
 
@@ -854,15 +871,16 @@
 
         const finalQuery = (cleanQuery.length >= 2) ? cleanQuery : undefined;
 
-        toolArgs = {
-          query: finalQuery,
+        toolArgs = BookSearchNormalization.normalizeAdvancedBookSearchArgs({
+          query: input,
+          title_starts_with: extractedTitlePrefix,
           genre: extractedGenre,
           max_price: extractedMaxPrice,
           published_year: extractedYearExact,
           published_before: extractedYearBefore,
           published_after: extractedYearAfter,
           stock_status: extractedStockStatus
-        };
+        }, knownGenres);
       }
 
       const dbData = await executeDatabaseTool(toolName, toolArgs);
@@ -934,7 +952,10 @@ CRITICAL RULES FOR PARAMETER EXTRACTION:
 1. When a user asks about genres (e.g., "show me science fiction books"), extract the EXACT genre name from the available genres list and use it in the 'genre' parameter. Do NOT put genre terms in the 'query' parameter.
 2. When a user asks about stock levels (e.g., "high stock items", "low stock", "out of stock"), use the appropriate 'stock_status' parameter value: "in_stock", "low_stock", or "out_of_stock". Do NOT put stock-related terms in the 'query' parameter.
 3. The 'query' parameter should ONLY contain title/author keywords, NOT genres, stock status, or other structured criteria.
-4. Only use 'advanced_book_search' when you need to search books. For simple title/author searches, use 'search_books' instead.
+4. For requests for books whose titles start with a letter or prefix, use 'advanced_book_search' with 'title_starts_with'.
+5. Only use 'advanced_book_search' when you need to search books. For simple title/author searches, use 'search_books' instead.
+
+Treat "starting with", "starts with", "begin with", "begins with", and "B-title books" as title-prefix requests.
 
 AVAILABLE GENRES: ${genres.join(', ')}
 
@@ -944,6 +965,7 @@ EXAMPLE MAPPINGS:
 - "Show me books under $20" → advanced_book_search({max_price: 20})
 - "Find mystery books from 2023" → advanced_book_search({genre: "Mystery", published_year: 2023})
 - "Low stock items" → advanced_book_search({stock_status: "low_stock"})
+- "Show me books starting with B" → advanced_book_search({title_starts_with: "B"})
 
 CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially if out of stock or featured in an event), you MUST invoke the 'reserve_book_copy' tool function.`;
     }
@@ -1180,11 +1202,15 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
         if (part && part.functionCall) {
           const toolCall = part.functionCall;
-          const toolResult = await executeDatabaseTool(toolCall.name, toolCall.args || {});
+          const availableGenres = await getAvailableGenres();
+          const toolArgs = toolCall.name === 'advanced_book_search'
+            ? BookSearchNormalization.normalizeAdvancedBookSearchArgs(toolCall.args || {}, availableGenres)
+            : (toolCall.args || {});
+          const toolResult = await executeDatabaseTool(toolCall.name, toolArgs);
 
           setActiveToolInfo({
             name: toolCall.name,
-            args: toolCall.args,
+            args: toolArgs,
             result: toolResult
           });
 
@@ -1218,7 +1244,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
           return {
             text: finalPart?.text || "Here is the information from our database.",
-            toolCalled: { name: toolCall.name, args: toolCall.args, result: toolResult }
+            toolCalled: { name: toolCall.name, args: toolArgs, result: toolResult }
           };
         }
 
