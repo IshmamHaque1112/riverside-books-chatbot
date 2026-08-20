@@ -1022,6 +1022,20 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         };
       }, []);
 
+      // Test API connection on mount
+      React.useEffect(() => {
+        async function testConnection() {
+          try {
+            console.log('[Connection Test] Testing Supabase connection...');
+            const testBooks = await fetchFromSupabase('books', { limit: 1 });
+            console.log('[Connection Test] SUCCESS - Connected to Supabase, found', testBooks?.length, 'books');
+          } catch (error) {
+            console.error('[Connection Test] FAILED - Could not connect to Supabase:', error);
+          }
+        }
+        testConnection();
+      }, []);
+
       const messagesEndRef = React.useRef(null);
 
       const scrollToBottom = () => {
@@ -1033,68 +1047,69 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       }, [messages, isLoading, activeToolInfo]);
 
       // Load DB Explorer data when opened
-      React.useEffect(() => {
-        async function loadDbData() {
-          if (isDbExplorerOpen) {
-            setDbLoading(true);
-            try {
-              console.log('[DB Explorer] Starting data load...');
-              
-              // Fetch books separately first
-              const books = await fetchFromSupabase('books');
-              console.log('[DB Explorer] Books loaded:', books?.length);
-              
-              // Fetch inventory
-              const inventory = await fetchFromSupabase('inventory');
-              console.log('[DB Explorer] Inventory loaded:', inventory?.length);
-              
-              // Combine books with inventory
-              const inventoryMap = {};
-              inventory.forEach(inv => {
-                inventoryMap[inv.book_id] = inv;
-              });
-              
-              const booksWithInventory = books.map(book => {
-                const inv = inventoryMap[book.book_id] || {};
-                let stockLevel = "Medium Stock";
-                if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-                else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-                else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
-                
-                return {
-                  id: book.book_id,
-                  title: book.title,
-                  author: book.author,
-                  price: book.regular_price,
-                  genre: book.genre,
-                  stock_quantity: inv.qty_in_stock || 0,
-                  stock_level: stockLevel
-                };
-              });
-              
-              // Fetch other data
-              const events = await fetchFromSupabase('events');
-              const merchandise = await fetchFromSupabase('merchandise');
-              
-              console.log('[DB Explorer] Events loaded:', events?.length);
-              console.log('[DB Explorer] Merchandise loaded:', merchandise?.length);
-              
-              setDbBooks(booksWithInventory);
-              setDbEvents(events);
-              setDbMerchandise(merchandise);
-              
-              console.log('[DB Explorer] Data load complete');
-            } catch (error) {
-              console.error('[DB Explorer] Error loading data:', error);
-              setDbBooks([]);
-              setDbEvents([]);
-              setDbMerchandise([]);
-            } finally {
-              setDbLoading(false);
-            }
-          }
+      const loadDbData = async () => {
+        setDbLoading(true);
+        try {
+          console.log('[DB Explorer] Starting data load...');
+          
+          // Fetch books first
+          const books = await fetchFromSupabase('books');
+          console.log('[DB Explorer] Books loaded:', books?.length);
+          
+          // Fetch inventory
+          const inventory = await fetchFromSupabase('inventory');
+          console.log('[DB Explorer] Inventory loaded:', inventory?.length);
+          
+          // Combine books with inventory
+          const inventoryMap = {};
+          inventory.forEach(inv => {
+            inventoryMap[inv.book_id] = inv;
+          });
+          
+          const booksWithInventory = books.map(book => {
+            const inv = inventoryMap[book.book_id] || {};
+            let stockLevel = "Medium Stock";
+            if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+            else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+            else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+            
+            return {
+              id: book.book_id,
+              title: book.title,
+              author: book.author,
+              price: book.regular_price,
+              genre: book.genre,
+              stock_quantity: inv.qty_in_stock || 0,
+              stock_level: stockLevel
+            };
+          });
+          
+          // Fetch other data
+          const events = await fetchFromSupabase('events');
+          const merchandise = await fetchFromSupabase('merchandise');
+          
+          console.log('[DB Explorer] Events loaded:', events?.length);
+          console.log('[DB Explorer] Merchandise loaded:', merchandise?.length);
+          
+          setDbBooks(booksWithInventory);
+          setDbEvents(events);
+          setDbMerchandise(merchandise);
+          
+          console.log('[DB Explorer] Data load complete');
+        } catch (error) {
+          console.error('[DB Explorer] Error loading data:', error);
+          setDbBooks([]);
+          setDbEvents([]);
+          setDbMerchandise([]);
+        } finally {
+          setDbLoading(false);
         }
-        loadDbData();
+      };
+
+      React.useEffect(() => {
+        if (isDbExplorerOpen) {
+          loadDbData();
+        }
       }, [isDbExplorerOpen]);
 
       async function callGeminiApi(userQuery, history) {
