@@ -31,6 +31,7 @@
 
     if (/\b(low stock|running low)\b/.test(lowerText)) filters.stock_status = 'low_stock';
     else if (/\b(out of stock|sold out)\b/.test(lowerText)) filters.stock_status = 'out_of_stock';
+    else if (/\b(high stock)\b/.test(lowerText)) filters.stock_status = 'high_stock';
     else if (/\b(high stock|in stock|available now|available)\b/.test(lowerText)) filters.stock_status = 'in_stock';
 
     const genre = availableGenres.find(item => lowerText.includes(item.toLowerCase()));
@@ -57,7 +58,7 @@
     }
 
     cleaned = cleaned
-      .replace(/\b(do you have|can i find|show me|show|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category)\b/gi, '')
+      .replace(/\b(do you have|can i find|show me|show|find|search|list|get|are there|any|books?|copies)\b/gi, '')
       .replace(/[^\w\s]/g, '')
       .trim();
 
@@ -74,9 +75,8 @@
       normalized.title_starts_with = detectedPrefix;
     }
     for (const [key, value] of Object.entries(detectedFilters)) {
-      if (normalized[key] === undefined || normalized[key] === null || normalized[key] === '') {
-        normalized[key] = value;
-      }
+      // The structured constraint stated in the user's query is authoritative.
+      normalized[key] = value;
     }
 
     normalized.query = stripStructuredPhrases(query, availableGenres);

@@ -153,10 +153,10 @@
     async function fetchFromSupabase(table, options = {}) {
       const { select = '*', filters = {}, limit = null, orderBy = null } = options;
       
-      // For the books table, load the capitalized table first.
+      // The catalog is stored in the capitalized Books table.
       let tableNames = [table, table.charAt(0).toUpperCase() + table.slice(1)];
       if (table.toLowerCase() === 'books') {
-        tableNames = ['Books', 'books']; // Try uppercase first for books
+        tableNames = ['Books'];
       }
       
       for (const tableName of tableNames) {
@@ -173,7 +173,7 @@
         
         // Add ordering
         if (orderBy) {
-          url += `&order=${orderBy.column}&order=${orderBy.ascending ? 'asc' : 'desc'}`;
+          url += `&order=${orderBy.column}.${orderBy.ascending ? 'asc' : 'desc'}`;
         }
         
         // Add limit (only if specified, otherwise get all rows)
@@ -270,7 +270,7 @@
             published_year: { type: "NUMBER", description: "Exact publication year." },
             published_before: { type: "NUMBER", description: "Upper bound publication year." },
             published_after: { type: "NUMBER", description: "Lower bound publication year." },
-            stock_status: { type: "STRING", enum: ["in_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter. Use 'in_stock' for high/available items, 'low_stock' for items running low, 'out_of_stock' for sold out items." },
+            stock_status: { type: "STRING", enum: ["in_stock", "high_stock", "low_stock", "out_of_stock", "all"], description: "Stock status filter. Use 'high_stock' only for high-stock items, 'in_stock' for any available item, 'low_stock' for items running low, and 'out_of_stock' for sold out items." },
             sort_by: { type: "STRING", description: "Sort criteria: 'price_asc', 'price_desc', 'year_desc', 'year_asc', 'title'." },
             limit: { type: "NUMBER", description: "Maximum number of results to return." }
           }
@@ -436,9 +436,11 @@
                 stock_level: "Unknown"
               }));
 
-              // Try to get inventory data (now handles case sensitivity automatically)
+              // Fetch inventory before applying a stock filter. Never treat missing data as zero stock.
+              let inventoryAvailable = false;
               try {
                 const inventory = await fetchFromSupabase('inventory');
+                inventoryAvailable = true;
                 const inventoryMap = {};
                 inventory.forEach(inv => {
                   inventoryMap[inv.book_id] = inv;
@@ -446,20 +448,27 @@
                 
                 // Update with inventory data
                 results = results.map(book => {
-                  const inv = inventoryMap[book.id] || {};
+                  const inv = inventoryMap[book.id];
+                  if (!inv) {
+                    return { ...book, stock_quantity: null, stock_level: "Unknown", low_stock_threshold: null };
+                  }
+
+                  const stockQuantity = Number(inv.qty_in_stock);
+                  const lowStockThreshold = Number(inv.low_stock_threshold ?? 5);
                   let stockLevel = "Medium Stock";
-                  if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-                  else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-                  else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                  if (stockQuantity === 0) stockLevel = "Out of Stock";
+                  else if (stockQuantity <= lowStockThreshold) stockLevel = "Low Stock";
+                  else if (stockQuantity >= 10) stockLevel = "High Stock";
                   
                   return {
                     ...book,
-                    stock_quantity: inv.qty_in_stock || 0,
-                    stock_level: stockLevel
+                    stock_quantity: stockQuantity,
+                    stock_level: stockLevel,
+                    low_stock_threshold: lowStockThreshold
                   };
                 });
               } catch (invError) {
-                console.warn('[advanced_book_search] Could not fetch inventory, showing books without stock data');
+                console.warn('[advanced_book_search] Could not fetch inventory');
               }
 
               // Apply filters
@@ -502,8 +511,18 @@
               }
 
               if (args.stock_status) {
+                if (!inventoryAvailable) {
+                  return {
+                    criteria_applied: args,
+                    match_count: 0,
+                    results: [],
+                    error: 'Live inventory is temporarily unavailable. Please try again shortly.'
+                  };
+                }
+
                 if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
-                else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 5);
+                else if (args.stock_status === 'high_stock') results = results.filter(b => b.stock_quantity >= 10);
+                else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= b.low_stock_threshold);
                 else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
               }
 
@@ -817,8 +836,10 @@
 
         const extractedTitlePrefix = BookSearchNormalization.extractTitlePrefix(input);
 
-        const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)/i);
+        const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/i);
         const extractedMaxPrice = maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined;
+        const minPriceMatch = input.match(/(?:over|above|more than|min|at least)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/i);
+        const extractedMinPrice = minPriceMatch ? parseFloat(minPriceMatch[1]) : undefined;
 
         const yearBeforeMatch = input.match(/(?:before|prior to|older than|earlier than|pre-?)\s*(\d{4})/i);
         let extractedYearBefore = yearBeforeMatch ? parseInt(yearBeforeMatch[1], 10) : undefined;
@@ -834,7 +855,9 @@
           extractedStockStatus = "low_stock";
         } else if (input.includes("out of stock") || input.includes("sold out")) {
           extractedStockStatus = "out_of_stock";
-        } else if (input.includes("high stock") || input.includes("in stock") || input.includes("available")) {
+        } else if (input.includes("high stock")) {
+          extractedStockStatus = "high_stock";
+        } else if (input.includes("in stock") || input.includes("available")) {
           extractedStockStatus = "in_stock";
         }
 
@@ -866,22 +889,25 @@
         }
 
         let cleanQuery = input
-          .replace(/(?:under|below|less than|max|cheaper than|over|above|more than|min|at least|\$)\s*\$?(\d+(?:\.\d+)?)/gi, '')
+          .replace(/(?:under|below|less than|max|cheaper than|over|above|more than|min|at least|\$)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/gi, '')
           .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from year|year)\s*(\d{4})/gi, '')
           .replace(/\b(20\d{2}|19\d{2})\b/g, '')
+          .replace(/(?:books?|titles?)?\s*(?:that\s+)?(?:start(?:s|ing)?|begin(?:s|ning)?)\s*(?:with\s+)?(?:the\s+letter\s+)?["']?[a-z0-9]+/gi, '')
+          .replace(/\b[a-z0-9]+[-\s](?:title|titled)\s+books?\b/gi, '')
           .replace(new RegExp(knownGenres.join('|'), 'gi'), '')
           .replace(/\b(high stock|low stock|out of stock|sold out|in stock|available|running low)\b/gi, '')
-          .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category)\b/gi, '')
+          .replace(/\b(do you have|can i find|show me|show|find|search|list|get|are there|any|books?|copies)\b/gi, '')
           .replace(/[^\w\s]/g, '')
           .trim();
 
         const finalQuery = (cleanQuery.length >= 2) ? cleanQuery : undefined;
 
         toolArgs = BookSearchNormalization.normalizeAdvancedBookSearchArgs({
-          query: input,
+          query: finalQuery,
           title_starts_with: extractedTitlePrefix,
           genre: extractedGenre,
           max_price: extractedMaxPrice,
+          min_price: extractedMinPrice,
           published_year: extractedYearExact,
           published_before: extractedYearBefore,
           published_after: extractedYearAfter,
@@ -902,7 +928,9 @@
           }
         }
       } else if (toolName === "advanced_book_search") {
-        if (dbData.results && dbData.results.length > 0) {
+        if (dbData.error) {
+          responseText = dbData.error;
+        } else if (dbData.results && dbData.results.length > 0) {
           const list = dbData.results.map(b => 
             `• **${b.title}** by ${b.author} - $${b.price ? b.price.toFixed(2) : 'N/A'} (${b.genre}, ${b.published_year}) [**${b.stock_quantity} in stock**]`
           ).join("\n");
@@ -956,7 +984,7 @@ Your goal is to answer customer questions strictly using live database tools.
 
 CRITICAL RULES FOR PARAMETER EXTRACTION:
 1. When a user asks about genres (e.g., "show me science fiction books"), extract the EXACT genre name from the available genres list and use it in the 'genre' parameter. Do NOT put genre terms in the 'query' parameter.
-2. When a user asks about stock levels (e.g., "high stock items", "low stock", "out of stock"), use the appropriate 'stock_status' parameter value: "in_stock", "low_stock", or "out_of_stock". Do NOT put stock-related terms in the 'query' parameter.
+2. When a user asks about stock levels, use the appropriate 'stock_status' parameter: "high_stock" for high stock, "in_stock" for available items, "low_stock", or "out_of_stock". Do NOT put stock-related terms in the 'query' parameter.
 3. The 'query' parameter should ONLY contain title/author keywords, NOT genres, stock status, or other structured criteria.
 4. For requests for books whose titles start with a letter or prefix, use 'advanced_book_search' with 'title_starts_with'.
 5. Only use 'advanced_book_search' when you need to search books. For simple title/author searches, use 'search_books' instead.
@@ -967,7 +995,7 @@ AVAILABLE GENRES: ${genres.join(', ')}
 
 EXAMPLE MAPPINGS:
 - "Show me science fiction books" → advanced_book_search({genre: "Science Fiction"})
-- "What are the high stock items" → advanced_book_search({stock_status: "in_stock"})
+- "What are the high stock items" → advanced_book_search({stock_status: "high_stock"})
 - "Show me books under $20" → advanced_book_search({max_price: 20})
 - "Find mystery books from 2023" → advanced_book_search({genre: "Mystery", published_year: 2023})
 - "Low stock items" → advanced_book_search({stock_status: "low_stock"})

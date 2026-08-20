@@ -47,4 +47,21 @@ assert.deepEqual(
   { query: undefined, published_year: 2021 }
 );
 
+for (const [query, expected] of [
+  ['Books over 20 dollars', { min_price: 20 }],
+  ['High stock books', { stock_status: 'high_stock' }],
+  ['Books in stock', { stock_status: 'in_stock' }],
+  ['Low stock books', { stock_status: 'low_stock' }],
+  ['Sold out books', { stock_status: 'out_of_stock' }],
+  ['Books before 2021', { published_before: 2021 }],
+  ['Books after 2021', { published_after: 2021 }]
+]) {
+  assert.deepEqual(normalizeAdvancedBookSearchArgs({ query }), { query: undefined, ...expected }, query);
+}
+
+assert.deepEqual(
+  normalizeAdvancedBookSearchArgs({ query: 'High stock books', stock_status: 'in_stock' }),
+  { query: undefined, stock_status: 'high_stock' }
+);
+
 console.log('Book search normalization tests passed.');
