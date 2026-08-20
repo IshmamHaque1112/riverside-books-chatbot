@@ -142,77 +142,72 @@
       }
     }
 
-    // Helper function to fetch from Supabase
+    // Helper function to fetch from Supabase with case-insensitive table names
     async function fetchFromSupabase(table, options = {}) {
       const { select = '*', filters = {}, limit = null, orderBy = null } = options;
       
-      let url = `${SUPABASE_URL}/rest/v1/${table}?select=${select}`;
+      // Try lowercase first, then uppercase if it fails
+      const tableNames = [table, table.charAt(0).toUpperCase() + table.slice(1)];
       
-      // Add filters
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url += `&${key}=eq.${encodeURIComponent(value)}`;
-        }
-      });
-      
-      // Add ordering
-      if (orderBy) {
-        url += `&order=${orderBy.column}&order=${orderBy.ascending ? 'asc' : 'desc'}`;
-      }
-      
-      // Add limit (only if specified, otherwise get all rows)
-      if (limit) {
-        url += `&limit=${limit}`;
-      }
-      
-      console.log(`[Supabase Request] ${table}:`, url);
-      
-      try {
-        const response = await fetch(url, {
-          headers: {
-            'apikey': SUPABASE_API_KEY,
-            'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-            'Content-Type': 'application/json',
-            'prefer': 'count=exact' // Get exact count
+      for (const tableName of tableNames) {
+        let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=${select}`;
+        
+        // Add filters
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            url += `&${key}=eq.${encodeURIComponent(value)}`;
           }
         });
         
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[Supabase Error] ${table}:`, response.status, errorText);
-          throw new Error(`Supabase error: ${response.status} ${response.statusText} - ${errorText}`);
+        // Add ordering
+        if (orderBy) {
+          url += `&order=${orderBy.column}&order=${orderBy.ascending ? 'asc' : 'desc'}`;
         }
         
-        const data = await response.json();
-        const count = response.headers.get('content-range') || response.headers.get('x-total-count');
-        console.log(`[Supabase Success] ${table}:`, data.length, 'records', count ? `(total: ${count})` : '');
-        return data;
-      } catch (error) {
-        console.error(`[Supabase Network Error] ${table}:`, error);
-        throw error;
+        // Add limit (only if specified, otherwise get all rows)
+        if (limit) {
+          url += `&limit=${limit}`;
+        }
+        
+        console.log(`[Supabase Request] ${tableName}:`, url);
+        
+        try {
+          const response = await fetch(url, {
+            headers: {
+              'apikey': SUPABASE_API_KEY,
+              'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+              'Content-Type': 'application/json',
+              'prefer': 'count=exact' // Get exact count
+            }
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.log(`[Supabase Try Failed] ${tableName}:`, response.status);
+            continue; // Try next table name
+          }
+          
+          const data = await response.json();
+          const count = response.headers.get('content-range') || response.headers.get('x-total-count');
+          console.log(`[Supabase Success] ${tableName}:`, data.length, 'records', count ? `(total: ${count})` : '');
+          return data;
+        } catch (error) {
+          console.log(`[Supabase Network Error] ${tableName}:`, error.message);
+          continue; // Try next table name
+        }
       }
+      
+      // If all attempts failed
+      throw new Error(`Could not fetch table '${table}' (tried: ${tableNames.join(', ')})`);
     }
 
     // Get inventory status for a book
     async function getBookInventoryStatus(bookId) {
       try {
-        let inventory = await fetchFromSupabase('inventory', {
+        const inventory = await fetchFromSupabase('inventory', {
           filters: { book_id: bookId },
           limit: 1
         });
-        
-        if (!inventory || inventory.length === 0) {
-          // Try uppercase
-          try {
-            inventory = await fetchFromSupabase('Inventory', {
-              filters: { book_id: bookId },
-              limit: 1
-            });
-          } catch (e) {
-            console.warn(`No inventory found for book_id: ${bookId}`);
-            return { stock_quantity: 0, stock_level: "Unknown", needs_reorder: false, low_stock_threshold: 5 };
-          }
-        }
         
         if (inventory && inventory.length > 0) {
           const inv = inventory[0];
@@ -423,9 +418,9 @@
                 stock_level: "Unknown"
               }));
 
-              // Try to get inventory data (case sensitive)
+              // Try to get inventory data (now handles case sensitivity automatically)
               try {
-                let inventory = await fetchFromSupabase('inventory');
+                const inventory = await fetchFromSupabase('inventory');
                 const inventoryMap = {};
                 inventory.forEach(inv => {
                   inventoryMap[inv.book_id] = inv;
@@ -446,31 +441,7 @@
                   };
                 });
               } catch (invError) {
-                console.warn('[advanced_book_search] Could not fetch inventory (lowercase), trying uppercase...');
-                try {
-                  let inventory = await fetchFromSupabase('Inventory');
-                  const inventoryMap = {};
-                  inventory.forEach(inv => {
-                    inventoryMap[inv.book_id] = inv;
-                  });
-                  
-                  // Update with inventory data
-                  results = results.map(book => {
-                    const inv = inventoryMap[book.id] || {};
-                    let stockLevel = "Medium Stock";
-                    if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-                    else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-                    else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
-                    
-                    return {
-                      ...book,
-                      stock_quantity: inv.qty_in_stock || 0,
-                      stock_level: stockLevel
-                    };
-                  });
-                } catch (invError2) {
-                  console.warn('[advanced_book_search] Could not fetch inventory at all, showing books without stock data');
-                }
+                console.warn('[advanced_book_search] Could not fetch inventory, showing books without stock data');
               }
 
               // Apply filters
@@ -541,16 +512,12 @@
               const events = await fetchFromSupabase('events');
               const books = await fetchFromSupabase('books');
               
-              // Try to get inventory (case sensitive)
+              // Try to get inventory (now handles case sensitivity automatically)
               let inventory = [];
               try {
                 inventory = await fetchFromSupabase('inventory');
               } catch (invError) {
-                try {
-                  inventory = await fetchFromSupabase('Inventory');
-                } catch (invError2) {
-                  console.warn('[relational_event_books] Could not fetch inventory');
-                }
+                console.warn('[relational_event_books] Could not fetch inventory');
               }
               
               // Create inventory map
@@ -609,16 +576,12 @@
               const q = (args.query || "").toLowerCase();
               const books = await fetchFromSupabase('books');
               
-              // Try to get inventory (case sensitive)
+              // Try to get inventory (now handles case sensitivity automatically)
               let inventory = [];
               try {
                 inventory = await fetchFromSupabase('inventory');
               } catch (invError) {
-                try {
-                  inventory = await fetchFromSupabase('Inventory');
-                } catch (invError2) {
-                  console.warn('[search_books] Could not fetch inventory');
-                }
+                console.warn('[search_books] Could not fetch inventory');
               }
               
               const inventoryMap = {};
@@ -1120,24 +1083,12 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           console.log('[DB Explorer] Books loaded:', books?.length);
           
           if (books && books.length < 35) {
-            console.warn('[DB Explorer] Only got', books.length, 'books, expected 35. This might be due to RLS policies or API key permissions.');
+            console.warn('[DB Explorer] Only got', books.length, 'books, expected 35.');
           }
           
-          // Try to fetch inventory (case sensitive)
-          let inventory = [];
-          try {
-            inventory = await fetchFromSupabase('inventory');
-            console.log('[DB Explorer] Inventory loaded (lowercase):', inventory?.length);
-          } catch (invError) {
-            console.log('[DB Explorer] Trying uppercase Inventory...');
-            try {
-              inventory = await fetchFromSupabase('Inventory');
-              console.log('[DB Explorer] Inventory loaded (uppercase):', inventory?.length);
-            } catch (invError2) {
-              console.warn('[DB Explorer] Could not load inventory table, will show books without stock data');
-              inventory = [];
-            }
-          }
+          // Fetch inventory (now handles case sensitivity automatically)
+          const inventory = await fetchFromSupabase('inventory');
+          console.log('[DB Explorer] Inventory loaded:', inventory?.length);
           
           // Combine books with inventory
           const inventoryMap = {};
@@ -1166,7 +1117,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
             };
           });
           
-          // Fetch other data
+          // Fetch other data (now handles case sensitivity automatically)
           const events = await fetchFromSupabase('events');
           const merchandise = await fetchFromSupabase('merchandise');
           
