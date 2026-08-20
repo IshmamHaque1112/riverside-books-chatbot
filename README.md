@@ -1,4 +1,8 @@
-This is intended to be the AI chatbot to be utilized to provide customer querying for the fictional Riverside Books
+This is intended to be the AI chatbot to be utilized to provide customer querying for the fictional Riverside Books.
+
+## Gemini configuration
+
+The Gemini key is intentionally kept off the client and out of source control. In the Vercel project, add an environment variable named `GEMINI_API_KEY` with the key value, then redeploy. The app sends Gemini requests through `/api/gemini`, so visitors never receive the key in their browser.
 1. Problem Statement Staff get pulled away from the register repeatedly to answer the same questions — store hours, return policy, upcoming events, and whether a specific title is in stock — instead of helping the customer in front of them.
 
 2. Target User A customer who's browsing online or calling ahead with a quick question, before deciding whether to make the trip in.
