@@ -37,4 +37,14 @@ assert.deepEqual(
   { query: undefined, sort_by: 'year_desc' }
 );
 
+assert.deepEqual(
+  normalizeAdvancedBookSearchArgs({ query: 'Books under 20 dollars' }),
+  { query: undefined, max_price: 20 }
+);
+
+assert.deepEqual(
+  normalizeAdvancedBookSearchArgs({ query: 'Books published in 2021' }),
+  { query: undefined, published_year: 2021 }
+);
+
 console.log('Book search normalization tests passed.');

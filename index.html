@@ -89,6 +89,12 @@
   <div id="root"></div>
 
   <script type="text/babel">
+    // Keep local search functional even if the optional normalization asset is unavailable.
+    const BookSearchNormalization = window.BookSearchNormalization || {
+      extractTitlePrefix: () => undefined,
+      normalizeAdvancedBookSearchArgs: (args) => args
+    };
+
     // Supabase Configuration
     const SUPABASE_URL = "https://wulylpywtdgoxamwlxlu.supabase.co";
     const SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1bHlscHl3dGRnb3hhbXdseGx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTgyMjYsImV4cCI6MjEwMjczNDIyNn0.6usgf9zXJ3ewsRrklNPBX1ByrAPybWsd2UGc2BPg_-I";

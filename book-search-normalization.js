@@ -17,8 +17,8 @@
     const filters = {};
     const lowerText = text.toLowerCase();
 
-    const maxPriceMatch = lowerText.match(/(?:under|below|less than|max(?:imum)?|cheaper than)\s*\$?(\d+(?:\.\d+)?)/);
-    const minPriceMatch = lowerText.match(/(?:over|above|more than|min(?:imum)?|at least)\s*\$?(\d+(?:\.\d+)?)/);
+    const maxPriceMatch = lowerText.match(/(?:under|below|less than|max(?:imum)?|cheaper than)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/);
+    const minPriceMatch = lowerText.match(/(?:over|above|more than|min(?:imum)?|at least)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/);
     if (maxPriceMatch) filters.max_price = Number(maxPriceMatch[1]);
     if (minPriceMatch) filters.min_price = Number(minPriceMatch[1]);
 
@@ -47,7 +47,7 @@
     let cleaned = text
       .replace(/(?:books?|titles?)?\s*(?:that\s+)?(?:start(?:s|ing)?|begin(?:s|ning)?)\s*(?:with\s+)?(?:the\s+letter\s+)?["']?[a-z0-9]+/gi, '')
       .replace(/\b[a-z0-9]+[-\s](?:title|titled)\s+books?\b/gi, '')
-      .replace(/(?:under|below|less than|max(?:imum)?|cheaper than|over|above|more than|min(?:imum)?|at least)\s*\$?(\d+(?:\.\d+)?)/gi, '')
+      .replace(/(?:under|below|less than|max(?:imum)?|cheaper than|over|above|more than|min(?:imum)?|at least)\s*\$?(\d+(?:\.\d+)?)(?:\s*(?:dollars?|bucks?))?/gi, '')
       .replace(/(?:before|prior to|older than|earlier than|after|since|newer than|published in|in year|from(?: year)?|year)\s*(\d{4})/gi, '')
       .replace(/\b(20\d{2}|19\d{2})\b/g, '')
       .replace(/\b(high stock|low stock|out of stock|sold out|in stock|available now|available|running low|recent|newest|latest|new releases?|cheap|cheapest|budget)\b/gi, '');

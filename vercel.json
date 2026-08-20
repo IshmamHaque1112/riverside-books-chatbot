@@ -12,6 +12,10 @@
   ],
   "routes": [
     {
+      "src": "/book-search-normalization\\.js",
+      "dest": "/book-search-normalization.js"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },
