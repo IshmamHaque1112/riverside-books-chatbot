@@ -88,200 +88,114 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const RIVERSIDE_DATABASE = {
-      store_info: {
-        id: 1,
-        store_name: "Riverside Books",
-        address: "428 Riverfront Place, Suite 100, Portland, OR 97201",
-        phone: "(503) 555-0192",
-        email: "hello@riversidebooks.com",
-        hours: "Monday–Saturday: 9:00 AM – 8:00 PM, Sunday: 10:00 AM – 6:00 PM",
-        return_policy: "Full refund with receipt within 30 days of purchase for books in original, unread condition.",
-        exchange_policy: "Exchanges or store credit permitted within 45 days of purchase with receipt or proof of purchase.",
-        reward_rule: "Earn 1 Point for every $1 spent. Reach 100 Points to receive a $10 store credit coupon.",
-        birthday_discount_rule: "Riverside Readers club members receive 20% off any single transaction during their birthday month!",
-        about_text: "Riverside Books is an independent, community-focused bookstore located along the scenic Portland waterfront. Founded in 2012, we curate a wide selection of contemporary fiction, local Pacific Northwest authors, poetry, children's literature, and artisanal gifts.",
-        available_genres: [
-          "Literary Fiction",
-          "Historical Fiction",
-          "Fantasy",
-          "Mystery / Thriller",
-          "Cookbook",
-          "Nature & Science",
-          "Poetry",
-          "Thriller",
-          "Children's / YA",
-          "Philosophy & Self-Help"
-        ]
-      },
-      
-      books: [
-        {
-          id: 101,
-          title: "The Map of Quiet Streets",
-          author: "Elena Rostova",
-          price: 18.99,
-          genre: "Literary Fiction",
-          isbn: "978-0-393-01928-1",
-          published_year: 2024,
-          stock_quantity: 3,
-          reorder_threshold: 5
-        },
-        {
-          id: 102,
-          title: "Echoes of the River",
-          author: "Marcus Vance",
-          price: 24.50,
-          genre: "Historical Fiction",
-          isbn: "978-1-5011-8822-4",
-          published_year: 2023,
-          stock_quantity: 8,
-          reorder_threshold: 4
-        },
-        {
-          id: 103,
-          title: "The Whispering Arbor",
-          author: "Clara Higgins",
-          price: 16.00,
-          genre: "Fantasy",
-          isbn: "978-0-7564-1290-8",
-          published_year: 2022,
-          stock_quantity: 1,
-          reorder_threshold: 3
-        },
-        {
-          id: 104,
-          title: "Shadows Over Cascadia",
-          author: "David K. Chen",
-          price: 22.00,
-          genre: "Mystery / Thriller",
-          isbn: "978-0-14-312980-0",
-          published_year: 2025,
-          stock_quantity: 0,
-          reorder_threshold: 5
-        },
-        {
-          id: 105,
-          title: "Baking along the Willamette",
-          author: "Sarah Jenkins",
-          price: 32.00,
-          genre: "Cookbook",
-          isbn: "978-1-68188-400-1",
-          published_year: 2023,
-          stock_quantity: 12,
-          reorder_threshold: 5
-        },
-        {
-          id: 106,
-          title: "Pacific Northwest Flora & Fauna",
-          author: "Dr. Robert Thorne",
-          price: 28.95,
-          genre: "Nature & Science",
-          isbn: "978-0-8117-3912-2",
-          published_year: 2021,
-          stock_quantity: 5,
-          reorder_threshold: 3
-        },
-        {
-          id: 107,
-          title: "A Century of Small Press Poetry",
-          author: "M. L. Thorne",
-          price: 14.99,
-          genre: "Poetry",
-          isbn: "978-1-933527-99-1",
-          published_year: 2020,
-          stock_quantity: 2,
-          reorder_threshold: 2
-        },
-        {
-          id: 108,
-          title: "Midnight at the Waterfront",
-          author: "Julian Thorne",
-          price: 17.50,
-          genre: "Thriller",
-          isbn: "978-0-316-42310-9",
-          published_year: 2024,
-          stock_quantity: 6,
-          reorder_threshold: 4
-        },
-        {
-          id: 109,
-          title: "Children of the Redwood Forest",
-          author: "Maya Lin",
-          price: 19.99,
-          genre: "Children's / YA",
-          isbn: "978-0-525-55523-0",
-          published_year: 2023,
-          stock_quantity: 10,
-          reorder_threshold: 5
-        },
-        {
-          id: 110,
-          title: "The Art of Mindful Reading",
-          author: "Hannah Wright",
-          price: 15.00,
-          genre: "Philosophy & Self-Help",
-          isbn: "978-1-78627-400-5",
-          published_year: 2022,
-          stock_quantity: 4,
-          reorder_threshold: 3
-        }
-      ],
+    // Supabase Configuration
+    const SUPABASE_URL = "https://wulylpywtdgoxamwlxlu.supabase.co";
+    const SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1bHlscHl3dGRnb3hhbXdseGx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTgyMjYsImV4cCI6MjEwMjczNDIyNn0.6usgf9zXJ3ewsRrklNPBX1ByrAPybWsd2UGc2BPg_-I";
 
-      events: [
-        {
-          id: 1,
-          event_date: "2026-08-25",
-          time: "6:30 PM - 8:00 PM",
-          title: "Local Author Spotlight: Elena Rostova",
-          description: "Author reading, Q&A, and book signing session for 'The Map of Quiet Streets'. Complimentary tea and pastries served!",
-          related_book_id: 101,
-          related_book_title: "The Map of Quiet Streets"
-        },
-        {
-          id: 2,
-          event_date: "2026-09-02",
-          time: "7:00 PM - 8:30 PM",
-          title: "Monthly Fiction Book Club",
-          description: "Discussion of 'Echoes of the River' led by bookstore curator Sarah Miller. All book lovers welcome!",
-          related_book_id: 102,
-          related_book_title: "Echoes of the River"
-        },
-        {
-          id: 3,
-          event_date: "2026-09-10",
-          time: "5:30 PM - 7:00 PM",
-          title: "Pacific Northwest Nature & Foraging Talk",
-          description: "Dr. Robert Thorne presents field guide slides and outdoor foraging safety tips.",
-          related_book_id: 106,
-          related_book_title: "Pacific Northwest Flora & Fauna"
-        },
-        {
-          id: 4,
-          event_date: "2026-09-18",
-          time: "10:30 AM - 11:30 AM",
-          title: "Kids Storytime & Forest Crafts",
-          description: "Interactive story reading of 'Children of the Redwood Forest' followed by a pinecone craft workshop.",
-          related_book_id: 109,
-          related_book_title: "Children of the Redwood Forest"
-        }
-      ],
-
-      merchandise: [
-        { id: 1, item_name: "Riverside Books Canvas ToteBag", category: "Accessories", price: 16.00, stock_quantity: 25 },
-        { id: 2, item_name: "Brass Leaf Botanical Bookmark", category: "Stationery", price: 8.50, stock_quantity: 40 },
-        { id: 3, item_name: "Ceramic Waterfront Mug (12oz)", category: "Drinkware", price: 14.00, stock_quantity: 15 },
-        { id: 4, item_name: "Linen Hardcover Reading Journal", category: "Stationery", price: 22.00, stock_quantity: 10 }
-      ],
-
-      reservations: [],
-
-      social_accounts: [
-        { platform: "Instagram", handle: "@riversidebooks_pdx", url: "https://instagram.com/riversidebooks_pdx" },
-        { platform: "Facebook", handle: "RiversideBooksPDX", url: "https://facebook.com/RiversideBooksPDX" },
-        { platform: "X / Twitter", handle: "@RiversideBooks", url: "https://twitter.com/RiversideBooks" }
-      ]
+    // Store info from CSV data (since table doesn't exist in Supabase)
+    const STORE_INFO = {
+      store_name: "Riverside Books",
+      address: "428 Riverfront Place, Suite 100, Portland, OR 97201",
+      phone: "(503) 555-0192",
+      email: "hello@riversidebooks.com",
+      hours: "Monday-Saturday: 10:00 AM-6:00 PM; Sunday: 11:00 AM-4:00 PM.",
+      return_policy: "Unopened books and gifts may be returned with a receipt within 14 days for store credit or a refund to the original payment method.",
+      exchange_policy: "Items may be exchanged within 14 days with a receipt. Exchanges for a different title are subject to current stock availability.",
+      reward_rule: "Earn one stamp for each completed purchase. Collect 10 stamps to receive 15% off one regularly priced book.",
+      birthday_discount_rule: "Rewards members receive 15% off one regularly priced book during their birthday month.",
+      about_text: "Riverside Books is an independent neighborhood bookstore on the riverfront. We carry new books, thoughtful gifts, and host friendly literary gatherings."
     };
+
+    function getStoreInfo() {
+      return STORE_INFO;
+    }
+
+    // Helper function to get available genres from books table
+    async function getAvailableGenres() {
+      try {
+        const books = await fetchFromSupabase('books');
+        const uniqueGenres = [...new Set(books.map(b => b.genre))].sort();
+        return uniqueGenres.length > 0 ? uniqueGenres : [
+          "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
+          "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
+          "Poetry", "Children's", "Memoir", "Essay Collection"
+        ];
+      } catch (error) {
+        console.error('Error fetching genres:', error);
+        return [
+          "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
+          "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
+          "Poetry", "Children's", "Memoir", "Essay Collection"
+        ];
+      }
+    }
+
+    // Helper function to fetch from Supabase
+    async function fetchFromSupabase(table, options = {}) {
+      const { select = '*', filters = {}, limit = null, orderBy = null } = options;
+      
+      let url = `${SUPABASE_URL}/rest/v1/${table}?select=${select}`;
+      
+      // Add filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url += `&${key}=eq.${encodeURIComponent(value)}`;
+        }
+      });
+      
+      // Add ordering
+      if (orderBy) {
+        url += `&order=${orderBy.column}&order=${orderBy.ascending ? 'asc' : 'desc'}`;
+      }
+      
+      // Add limit
+      if (limit) {
+        url += `&limit=${limit}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: {
+          'apikey': SUPABASE_API_KEY,
+          'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Supabase error: ${response.status} ${response.statusText}`);
+      }
+      
+      return response.json();
+    }
+
+    // Get inventory status for a book
+    async function getBookInventoryStatus(bookId) {
+      try {
+        const inventory = await fetchFromSupabase('inventory', {
+          filters: { book_id: bookId },
+          limit: 1
+        });
+        
+        if (inventory && inventory.length > 0) {
+          const inv = inventory[0];
+          let stockLevel = "Medium Stock";
+          if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+          else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+          else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+          
+          return {
+            stock_quantity: inv.qty_in_stock,
+            stock_level: stockLevel,
+            needs_reorder: inv.needs_reorder,
+            low_stock_threshold: inv.low_stock_threshold
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching inventory:', error);
+      }
+      
+      return { stock_quantity: 0, stock_level: "Unknown", needs_reorder: false, low_stock_threshold: 5 };
+    }
 
     const getInventoryStatus = (book) => {
       let level = "Medium Stock";
@@ -306,7 +220,7 @@
             query: { type: "STRING", description: "Title or author keywords ONLY. Do NOT include genre names, stock status, or other structured filters here." },
             max_price: { type: "NUMBER", description: "Maximum price limit." },
             min_price: { type: "NUMBER", description: "Minimum price limit." },
-            genre: { type: "STRING", description: "Exact genre name from available genres. Must match one of: Literary Fiction, Historical Fiction, Fantasy, Mystery / Thriller, Cookbook, Nature & Science, Poetry, Thriller, Children's / YA, Philosophy & Self-Help" },
+            genre: { type: "STRING", description: "Exact genre name from available genres. Must match one of: Literary Fiction, Historical Fiction, Fantasy, Science Fiction, Mystery, Thriller, Romance, Cookbook, Nature, History, Poetry, Children's, Memoir, Essay Collection" },
             published_year: { type: "NUMBER", description: "Exact publication year." },
             published_before: { type: "NUMBER", description: "Upper bound publication year." },
             published_after: { type: "NUMBER", description: "Lower bound publication year." },
@@ -394,191 +308,336 @@
       }
     ];
 
-    function executeDatabaseTool(name, args) {
+    async function executeDatabaseTool(name, args) {
       console.log(`[Database Query Executed] Tool: ${name}`, args);
       
-      switch(name) {
-        case "reserve_book_copy": {
-          const bookTitleQuery = (args.book_title || "").toLowerCase().trim();
-          const bookMatch = RIVERSIDE_DATABASE.books.find(b => b.title.toLowerCase().includes(bookTitleQuery));
-          
-          const reservationId = "RES-" + Math.floor(100000 + Math.random() * 900000);
-          const quantity = args.quantity || 1;
-          const customerName = args.customer_name || "Valued Customer";
-          const contact = args.email_or_phone || "(503) 555-0192";
+      try {
+        switch(name) {
+          case "reserve_book_copy": {
+            // Find the book by title
+            const books = await fetchFromSupabase('books');
+            const bookTitleQuery = (args.book_title || "").toLowerCase().trim();
+            const bookMatch = books.find(b => b.title.toLowerCase().includes(bookTitleQuery));
+            
+            const reservationId = "RES-" + Math.floor(100000 + Math.random() * 900000);
+            const quantity = args.quantity || 1;
+            const customerName = args.customer_name || "Valued Customer";
+            const contact = args.email_or_phone || "(503) 555-0192";
 
-          const newReservation = {
-            id: reservationId,
-            book_title: bookMatch ? bookMatch.title : args.book_title,
-            book_id: bookMatch ? bookMatch.id : null,
-            customer_name: customerName,
-            contact: contact,
-            quantity: quantity,
-            timestamp: new Date().toLocaleString(),
-            status: bookMatch && bookMatch.stock_quantity > 0 ? "Held for Pickup" : "Pre-order Queued (Restocking Soon)"
-          };
+            // Get inventory status
+            let stockStatus = { stock_quantity: 0, stock_level: "Out of Stock" };
+            if (bookMatch) {
+              stockStatus = await getBookInventoryStatus(bookMatch.book_id);
+            }
 
-          RIVERSIDE_DATABASE.reservations.push(newReservation);
+            const newReservation = {
+              id: reservationId,
+              book_title: bookMatch ? bookMatch.title : args.book_title,
+              book_id: bookMatch ? bookMatch.book_id : null,
+              customer_name: customerName,
+              contact: contact,
+              quantity: quantity,
+              timestamp: new Date().toLocaleString(),
+              status: stockStatus.stock_quantity > 0 ? "Held for Pickup" : "Pre-order Queued (Restocking Soon)"
+            };
 
-          return {
-            success: true,
-            reservation_id: reservationId,
-            reservation_details: newReservation,
-            book_stock_status: bookMatch ? getInventoryStatus(bookMatch) : { stock_quantity: 0, stock_level: "Out of Stock" }
-          };
-        }
-
-        case "advanced_book_search": {
-          let results = RIVERSIDE_DATABASE.books.map(getInventoryStatus);
-
-          if (args.genre && args.genre.trim()) {
-            const searchGenre = args.genre.toLowerCase().trim();
-            results = results.filter(b => b.genre.toLowerCase().includes(searchGenre));
+            return {
+              success: true,
+              reservation_id: reservationId,
+              reservation_details: newReservation,
+              book_stock_status: stockStatus
+            };
           }
 
-          if (args.query && args.query.trim()) {
-            const q = args.query.toLowerCase().trim();
-            results = results.filter(b => 
+          case "advanced_book_search": {
+            // Fetch all books with their inventory
+            const books = await fetchFromSupabase('books');
+            const inventory = await fetchFromSupabase('inventory');
+            
+            // Create a map of book_id to inventory data
+            const inventoryMap = {};
+            inventory.forEach(inv => {
+              inventoryMap[inv.book_id] = inv;
+            });
+
+            // Combine books with inventory data
+            let results = books.map(book => {
+              const inv = inventoryMap[book.book_id] || {};
+              let stockLevel = "Medium Stock";
+              if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+              else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+              else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+              
+              return {
+                id: book.book_id,
+                title: book.title,
+                author: book.author,
+                price: book.regular_price,
+                genre: book.genre,
+                isbn: book.isbn,
+                published_year: new Date(book.pub_date).getFullYear(),
+                stock_quantity: inv.qty_in_stock || 0,
+                stock_level: stockLevel,
+                needs_reorder: inv.needs_reorder || false,
+                format: book.format,
+                rating: book.rating,
+                bestseller: book.bestseller,
+                staff_pick: book.staff_pick
+              };
+            });
+
+            // Apply filters
+            if (args.genre && args.genre.trim()) {
+              const searchGenre = args.genre.toLowerCase().trim();
+              results = results.filter(b => b.genre.toLowerCase().includes(searchGenre));
+            }
+
+            if (args.query && args.query.trim()) {
+              const q = args.query.toLowerCase().trim();
+              results = results.filter(b => 
+                b.title.toLowerCase().includes(q) || 
+                b.author.toLowerCase().includes(q) || 
+                b.genre.toLowerCase().includes(q)
+              );
+            }
+
+            if (typeof args.max_price === 'number') {
+              results = results.filter(b => b.price <= args.max_price);
+            }
+            if (typeof args.min_price === 'number') {
+              results = results.filter(b => b.price >= args.min_price);
+            }
+
+            if (typeof args.published_year === 'number') {
+              results = results.filter(b => b.published_year === args.published_year);
+            }
+
+            if (typeof args.published_after === 'number') {
+              results = results.filter(b => b.published_year >= args.published_after);
+            }
+            if (typeof args.published_before === 'number') {
+              results = results.filter(b => b.published_year <= args.published_before);
+            }
+
+            if (args.stock_status) {
+              if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
+              else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 5);
+              else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
+            }
+
+            if (args.sort_by) {
+              if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
+              else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
+              else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
+              else if (args.sort_by === 'year_asc') results.sort((a,b) => a.published_year - b.published_year);
+              else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
+            }
+
+            if (typeof args.limit === 'number' && args.limit > 0) {
+              results = results.slice(0, args.limit);
+            }
+
+            return {
+              criteria_applied: args,
+              match_count: results.length,
+              results: results
+            };
+          }
+
+          case "relational_event_books": {
+            const events = await fetchFromSupabase('events');
+            const books = await fetchFromSupabase('books');
+            const inventory = await fetchFromSupabase('inventory');
+            
+            // Create inventory map
+            const inventoryMap = {};
+            inventory.forEach(inv => {
+              inventoryMap[inv.book_id] = inv;
+            });
+
+            const joinedEvents = await Promise.all(events.map(async event => {
+              let bookDetails = null;
+              if (event.book_id) {
+                const book = books.find(b => b.book_id === event.book_id);
+                if (book) {
+                  const inv = inventoryMap[book.book_id] || {};
+                  let stockLevel = "Medium Stock";
+                  if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                  else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                  else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                  
+                  bookDetails = {
+                    id: book.book_id,
+                    title: book.title,
+                    author: book.author,
+                    price: book.regular_price,
+                    stock_quantity: inv.qty_in_stock || 0,
+                    stock_level: stockLevel
+                  };
+                }
+              }
+              
+              return {
+                id: event.event_id,
+                title: event.event_name,
+                event_date: event.event_date,
+                time: event.event_time,
+                location: event.event_location,
+                description: event.event_description,
+                book_id: event.book_id,
+                ticket_price: event.ticket_price,
+                book_details: bookDetails
+              };
+            }));
+            
+            return {
+              joined_records: joinedEvents.length,
+              events_with_inventory: joinedEvents
+            };
+          }
+
+          case "search_books": {
+            const q = (args.query || "").toLowerCase();
+            const books = await fetchFromSupabase('books');
+            const inventory = await fetchFromSupabase('inventory');
+            
+            const inventoryMap = {};
+            inventory.forEach(inv => {
+              inventoryMap[inv.book_id] = inv;
+            });
+
+            const matches = books.filter(b => 
               b.title.toLowerCase().includes(q) || 
               b.author.toLowerCase().includes(q) || 
               b.genre.toLowerCase().includes(q)
-            );
-          }
-
-          if (typeof args.max_price === 'number') {
-            results = results.filter(b => b.price <= args.max_price);
-          }
-          if (typeof args.min_price === 'number') {
-            results = results.filter(b => b.price >= args.min_price);
-          }
-
-          if (typeof args.published_year === 'number') {
-            results = results.filter(b => b.published_year === args.published_year);
-          }
-
-          if (typeof args.published_after === 'number') {
-            results = results.filter(b => b.published_year >= args.published_after);
-          }
-          if (typeof args.published_before === 'number') {
-            results = results.filter(b => b.published_year <= args.published_before);
-          }
-
-          if (args.stock_status) {
-            if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
-            else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 2);
-            else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
-          }
-
-          if (args.sort_by) {
-            if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
-            else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
-            else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
-            else if (args.sort_by === 'year_asc') results.sort((a,b) => a.published_year - b.published_year);
-            else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
-          }
-
-          if (typeof args.limit === 'number' && args.limit > 0) {
-            results = results.slice(0, args.limit);
-          }
-
-          return {
-            criteria_applied: args,
-            match_count: results.length,
-            results: results
-          };
-        }
-
-        case "relational_event_books": {
-          const joinedEvents = RIVERSIDE_DATABASE.events.map(event => {
-            const book = RIVERSIDE_DATABASE.books.find(b => b.id === event.related_book_id);
-            return {
-              ...event,
-              book_details: book ? getInventoryStatus(book) : null
-            };
-          });
-          return {
-            joined_records: joinedEvents.length,
-            events_with_inventory: joinedEvents
-          };
-        }
-
-        case "search_books": {
-          const q = (args.query || "").toLowerCase();
-          const matches = RIVERSIDE_DATABASE.books
-            .filter(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.genre.toLowerCase().includes(q))
-            .map(getInventoryStatus);
+            ).map(book => {
+              const inv = inventoryMap[book.book_id] || {};
+              let stockLevel = "Medium Stock";
+              if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+              else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+              else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+              
+              return {
+                id: book.book_id,
+                title: book.title,
+                author: book.author,
+                price: book.regular_price,
+                genre: book.genre,
+                published_year: new Date(book.pub_date).getFullYear(),
+                stock_quantity: inv.qty_in_stock || 0,
+                stock_level: stockLevel
+              };
+            });
             
-          return {
-            query: args.query,
-            match_count: matches.length,
-            results: matches
-          };
-        }
-
-        case "get_store_hours": {
-          return {
-            store_name: RIVERSIDE_DATABASE.store_info.store_name,
-            hours: RIVERSIDE_DATABASE.store_info.hours
-          };
-        }
-
-        case "get_return_policy": {
-          return {
-            return_policy: RIVERSIDE_DATABASE.store_info.return_policy,
-            exchange_policy: RIVERSIDE_DATABASE.store_info.exchange_policy
-          };
-        }
-
-        case "get_rewards_info": {
-          return {
-            reward_rule: RIVERSIDE_DATABASE.store_info.reward_rule,
-            birthday_discount_rule: RIVERSIDE_DATABASE.store_info.birthday_discount_rule
-          };
-        }
-
-        case "get_available_genres": {
-          return {
-            genres: RIVERSIDE_DATABASE.store_info.available_genres
-          };
-        }
-
-        case "get_upcoming_events": {
-          const limit = args.limit || 5;
-          return {
-            total_events: RIVERSIDE_DATABASE.events.length,
-            upcoming_events: RIVERSIDE_DATABASE.events.slice(0, limit)
-          };
-        }
-
-        case "get_about_store": {
-          return {
-            store_name: RIVERSIDE_DATABASE.store_info.store_name,
-            about_text: RIVERSIDE_DATABASE.store_info.about_text,
-            address: RIVERSIDE_DATABASE.store_info.address,
-            phone: RIVERSIDE_DATABASE.store_info.phone,
-            email: RIVERSIDE_DATABASE.store_info.email
-          };
-        }
-
-        case "search_merchandise": {
-          const q = (args.query || "").toLowerCase();
-          let items = RIVERSIDE_DATABASE.merchandise
-            .filter(m => m.item_name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
-          if (typeof args.max_price === 'number') {
-            items = items.filter(m => m.price <= args.max_price);
+            return {
+              query: args.query,
+              match_count: matches.length,
+              results: matches
+            };
           }
-          return {
-            query: args.query,
-            results: items
-          };
-        }
 
-        default:
-          return { error: `Unknown tool name: ${name}` };
+          case "get_store_hours": {
+            const storeInfo = getStoreInfo();
+            return {
+              store_name: storeInfo.store_name,
+              hours: storeInfo.hours
+            };
+          }
+
+          case "get_return_policy": {
+            const storeInfo = getStoreInfo();
+            return {
+              return_policy: storeInfo.return_policy,
+              exchange_policy: storeInfo.exchange_policy
+            };
+          }
+
+          case "get_rewards_info": {
+            const storeInfo = getStoreInfo();
+            return {
+              reward_rule: storeInfo.reward_rule,
+              birthday_discount_rule: storeInfo.birthday_discount_rule
+            };
+          }
+
+          case "get_available_genres": {
+            const genres = await getAvailableGenres();
+            return {
+              genres: genres
+            };
+          }
+
+          case "get_upcoming_events": {
+            const limit = args.limit || 5;
+            const events = await fetchFromSupabase('events', {
+              orderBy: { column: 'event_date', ascending: true },
+              limit: limit
+            });
+            
+            const upcomingEvents = events.map(event => ({
+              id: event.event_id,
+              title: event.event_name,
+              event_date: event.event_date,
+              time: event.event_time,
+              location: event.event_location,
+              description: event.event_description,
+              book_id: event.book_id,
+              ticket_price: event.ticket_price
+            }));
+            
+            return {
+              total_events: events.length,
+              upcoming_events: upcomingEvents
+            };
+          }
+
+          case "get_about_store": {
+            const storeInfo = getStoreInfo();
+            return {
+              store_name: storeInfo.store_name,
+              about_text: storeInfo.about_text,
+              address: storeInfo.address,
+              phone: storeInfo.phone,
+              email: storeInfo.email
+            };
+          }
+
+          case "search_merchandise": {
+            const q = (args.query || "").toLowerCase();
+            const merchandise = await fetchFromSupabase('merchandise');
+            
+            let items = merchandise.filter(m => 
+              m.item_name.toLowerCase().includes(q) || 
+              m.item_type.toLowerCase().includes(q)
+            );
+            
+            if (typeof args.max_price === 'number') {
+              items = items.filter(m => m.price <= args.max_price);
+            }
+            
+            const results = items.map(item => ({
+              id: item.item_id,
+              item_name: item.item_name,
+              category: item.item_type,
+              price: item.price
+            }));
+            
+            return {
+              query: args.query,
+              results: results
+            };
+          }
+
+          default:
+            return { error: `Unknown tool name: ${name}` };
+        }
+      } catch (error) {
+        console.error('Error executing database tool:', error);
+        return { error: `Database error: ${error.message}` };
       }
     }
 
-    function processLocalQuery(userInput) {
+    async function processLocalQuery(userInput) {
       const input = userInput.toLowerCase();
       let toolName = null;
       let toolArgs = {};
@@ -586,15 +645,22 @@
       if (input.includes("reserve") || input.includes("hold") || input.includes("pre-order") || input.includes("preorder")) {
         toolName = "reserve_book_copy";
         
-        let foundTitle = "The Map of Quiet Streets";
-        for (const b of RIVERSIDE_DATABASE.books) {
-          if (input.includes(b.title.toLowerCase())) {
-            foundTitle = b.title;
-            break;
+        // Try to find a book title in the input
+        let foundTitle = null;
+        try {
+          const books = await fetchFromSupabase('books');
+          for (const b of books) {
+            if (input.includes(b.title.toLowerCase())) {
+              foundTitle = b.title;
+              break;
+            }
           }
+        } catch (error) {
+          console.error('Error fetching books for reservation:', error);
         }
+        
         toolArgs = {
-          book_title: foundTitle,
+          book_title: foundTitle || "Unknown Book",
           customer_name: "Valued Customer",
           email_or_phone: "(503) 555-0192"
         };
@@ -641,7 +707,7 @@
         }
 
         let extractedGenre = undefined;
-        const knownGenres = RIVERSIDE_DATABASE.store_info.available_genres;
+        const knownGenres = await getAvailableGenres();
         for (const g of knownGenres) {
           if (input.includes(g.toLowerCase())) {
             extractedGenre = g;
@@ -649,16 +715,20 @@
           }
         }
         if (!extractedGenre) {
-          if (input.includes("science fiction")) extractedGenre = "Fantasy"; // Best match for science fiction
+          if (input.includes("science fiction")) extractedGenre = "Science Fiction";
           else if (input.includes("fiction") && !input.includes("historical")) extractedGenre = "Literary Fiction";
           else if (input.includes("historical")) extractedGenre = "Historical Fiction";
           else if (input.includes("fantasy")) extractedGenre = "Fantasy";
-          else if (input.includes("mystery") || input.includes("thriller")) extractedGenre = input.includes("mystery") ? "Mystery / Thriller" : "Thriller";
+          else if (input.includes("mystery")) extractedGenre = "Mystery";
+          else if (input.includes("thriller")) extractedGenre = "Thriller";
+          else if (input.includes("romance")) extractedGenre = "Romance";
           else if (input.includes("cookbook") || input.includes("cooking")) extractedGenre = "Cookbook";
-          else if (input.includes("nature") || (input.includes("science") && !input.includes("fiction"))) extractedGenre = "Nature & Science";
+          else if (input.includes("nature")) extractedGenre = "Nature";
+          else if (input.includes("history")) extractedGenre = "History";
           else if (input.includes("poetry")) extractedGenre = "Poetry";
-          else if (input.includes("children") || input.includes("kids")) extractedGenre = "Children's / YA";
-          else if (input.includes("philosophy") || input.includes("self-help")) extractedGenre = "Philosophy & Self-Help";
+          else if (input.includes("children") || input.includes("kids")) extractedGenre = "Children's";
+          else if (input.includes("memoir")) extractedGenre = "Memoir";
+          else if (input.includes("essay")) extractedGenre = "Essay Collection";
         }
 
         let cleanQuery = input
@@ -684,7 +754,7 @@
         };
       }
 
-      const dbData = executeDatabaseTool(toolName, toolArgs);
+      const dbData = await executeDatabaseTool(toolName, toolArgs);
       let responseText = "";
 
       if (toolName === "reserve_book_copy") {
@@ -736,7 +806,10 @@
       };
     }
 
-    const SYSTEM_INSTRUCTION = `You are a helpful, warm customer support assistant for Riverside Books in Portland, Oregon. 
+    // Dynamic system instruction that will be updated with current genres
+    async function getSystemInstruction() {
+      const genres = await getAvailableGenres();
+      return `You are a helpful, warm customer support assistant for Riverside Books in Portland, Oregon. 
 Your goal is to answer customer questions strictly using live database tools.
 
 CRITICAL RULES FOR PARAMETER EXTRACTION:
@@ -745,16 +818,17 @@ CRITICAL RULES FOR PARAMETER EXTRACTION:
 3. The 'query' parameter should ONLY contain title/author keywords, NOT genres, stock status, or other structured criteria.
 4. Only use 'advanced_book_search' when you need to search books. For simple title/author searches, use 'search_books' instead.
 
+AVAILABLE GENRES: ${genres.join(', ')}
+
 EXAMPLE MAPPINGS:
-- "Show me science fiction books" → advanced_book_search({genre: "Fantasy"}) [if no exact match, map "science fiction" to "Fantasy" or "Nature & Science"]
+- "Show me science fiction books" → advanced_book_search({genre: "Science Fiction"})
 - "What are the high stock items" → advanced_book_search({stock_status: "in_stock"})
 - "Show me books under $20" → advanced_book_search({max_price: 20})
-- "Find mystery books from 2023" → advanced_book_search({genre: "Mystery / Thriller", published_year: 2023})
+- "Find mystery books from 2023" → advanced_book_search({genre: "Mystery", published_year: 2023})
 - "Low stock items" → advanced_book_search({stock_status: "low_stock"})
 
-AVAILABLE GENRES: Literary Fiction, Historical Fiction, Fantasy, Mystery / Thriller, Cookbook, Nature & Science, Poetry, Thriller, Children's / YA, Philosophy & Self-Help
-
 CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially if out of stock or featured in an event), you MUST invoke the 'reserve_book_copy' tool function.`;
+    }
 
     const SEARCH_EXAMPLE_CATEGORIES = [
       {
@@ -859,10 +933,11 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
         contents.push({ role: 'user', parts: [{ text: userQuery }] });
 
+        const systemInstruction = await getSystemInstruction();
         const payload = {
           contents: contents,
           tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
-          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] }
+          systemInstruction: { parts: [{ text: systemInstruction }] }
         };
 
         const response = await fetch(endpoint, {
@@ -881,7 +956,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
 
         if (part && part.functionCall) {
           const toolCall = part.functionCall;
-          const toolResult = executeDatabaseTool(toolCall.name, toolCall.args || {});
+          const toolResult = await executeDatabaseTool(toolCall.name, toolCall.args || {});
 
           setActiveToolInfo({
             name: toolCall.name,
@@ -903,12 +978,13 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
             }
           ];
 
+          const followUpSystemInstruction = await getSystemInstruction();
           const followUpResponse = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: followUpContents,
-              systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] }
+              systemInstruction: { parts: [{ text: followUpSystemInstruction }] }
             })
           });
 
@@ -977,7 +1053,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         } catch (error) {
           console.error("Error generating response:", error);
           try {
-            const fallbackReply = processLocalQuery(text);
+            const fallbackReply = await processLocalQuery(text);
             setMessages(prev => [
               ...prev,
               {
