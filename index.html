@@ -146,10 +146,10 @@
     async function fetchFromSupabase(table, options = {}) {
       const { select = '*', filters = {}, limit = null, orderBy = null } = options;
       
-      // For books table, try uppercase first (Book has 35 rows, books has 3 rows)
+      // For the books table, load the capitalized table first.
       let tableNames = [table, table.charAt(0).toUpperCase() + table.slice(1)];
       if (table.toLowerCase() === 'books') {
-        tableNames = ['Book', 'books']; // Try uppercase first for books
+        tableNames = ['Books', 'books']; // Try uppercase first for books
       }
       
       for (const tableName of tableNames) {
