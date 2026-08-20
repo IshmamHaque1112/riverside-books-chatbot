@@ -160,7 +160,7 @@
         url += `&order=${orderBy.column}&order=${orderBy.ascending ? 'asc' : 'desc'}`;
       }
       
-      // Add limit
+      // Add limit (only if specified, otherwise get all rows)
       if (limit) {
         url += `&limit=${limit}`;
       }
@@ -172,7 +172,8 @@
           headers: {
             'apikey': SUPABASE_API_KEY,
             'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'prefer': 'count=exact' // Get exact count
           }
         });
         
@@ -183,7 +184,8 @@
         }
         
         const data = await response.json();
-        console.log(`[Supabase Success] ${table}:`, data.length, 'records');
+        const count = response.headers.get('content-range') || response.headers.get('x-total-count');
+        console.log(`[Supabase Success] ${table}:`, data.length, 'records', count ? `(total: ${count})` : '');
         return data;
       } catch (error) {
         console.error(`[Supabase Network Error] ${table}:`, error);
@@ -194,10 +196,23 @@
     // Get inventory status for a book
     async function getBookInventoryStatus(bookId) {
       try {
-        const inventory = await fetchFromSupabase('inventory', {
+        let inventory = await fetchFromSupabase('inventory', {
           filters: { book_id: bookId },
           limit: 1
         });
+        
+        if (!inventory || inventory.length === 0) {
+          // Try uppercase
+          try {
+            inventory = await fetchFromSupabase('Inventory', {
+              filters: { book_id: bookId },
+              limit: 1
+            });
+          } catch (e) {
+            console.warn(`No inventory found for book_id: ${bookId}`);
+            return { stock_quantity: 0, stock_level: "Unknown", needs_reorder: false, low_stock_threshold: 5 };
+          }
+        }
         
         if (inventory && inventory.length > 0) {
           const inv = inventory[0];
@@ -212,8 +227,6 @@
             needs_reorder: inv.needs_reorder,
             low_stock_threshold: inv.low_stock_threshold
           };
-        } else {
-          console.warn(`No inventory found for book_id: ${bookId}`);
         }
       } catch (error) {
         console.error('Error fetching inventory:', error);
@@ -410,9 +423,9 @@
                 stock_level: "Unknown"
               }));
 
-              // Try to get inventory data
+              // Try to get inventory data (case sensitive)
               try {
-                const inventory = await fetchFromSupabase('inventory');
+                let inventory = await fetchFromSupabase('inventory');
                 const inventoryMap = {};
                 inventory.forEach(inv => {
                   inventoryMap[inv.book_id] = inv;
@@ -433,7 +446,31 @@
                   };
                 });
               } catch (invError) {
-                console.warn('[advanced_book_search] Could not fetch inventory:', invError);
+                console.warn('[advanced_book_search] Could not fetch inventory (lowercase), trying uppercase...');
+                try {
+                  let inventory = await fetchFromSupabase('Inventory');
+                  const inventoryMap = {};
+                  inventory.forEach(inv => {
+                    inventoryMap[inv.book_id] = inv;
+                  });
+                  
+                  // Update with inventory data
+                  results = results.map(book => {
+                    const inv = inventoryMap[book.id] || {};
+                    let stockLevel = "Medium Stock";
+                    if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                    else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                    else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                    
+                    return {
+                      ...book,
+                      stock_quantity: inv.qty_in_stock || 0,
+                      stock_level: stockLevel
+                    };
+                  });
+                } catch (invError2) {
+                  console.warn('[advanced_book_search] Could not fetch inventory at all, showing books without stock data');
+                }
               }
 
               // Apply filters
@@ -503,7 +540,18 @@
             try {
               const events = await fetchFromSupabase('events');
               const books = await fetchFromSupabase('books');
-              const inventory = await fetchFromSupabase('inventory');
+              
+              // Try to get inventory (case sensitive)
+              let inventory = [];
+              try {
+                inventory = await fetchFromSupabase('inventory');
+              } catch (invError) {
+                try {
+                  inventory = await fetchFromSupabase('Inventory');
+                } catch (invError2) {
+                  console.warn('[relational_event_books] Could not fetch inventory');
+                }
+              }
               
               // Create inventory map
               const inventoryMap = {};
@@ -560,7 +608,18 @@
             try {
               const q = (args.query || "").toLowerCase();
               const books = await fetchFromSupabase('books');
-              const inventory = await fetchFromSupabase('inventory');
+              
+              // Try to get inventory (case sensitive)
+              let inventory = [];
+              try {
+                inventory = await fetchFromSupabase('inventory');
+              } catch (invError) {
+                try {
+                  inventory = await fetchFromSupabase('Inventory');
+                } catch (invError2) {
+                  console.warn('[search_books] Could not fetch inventory');
+                }
+              }
               
               const inventoryMap = {};
               inventory.forEach(inv => {
@@ -996,8 +1055,8 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       const [isLoading, setIsLoading] = React.useState(false);
       const [activeToolInfo, setActiveToolInfo] = React.useState(null);
       
-      const [queryMode, setQueryMode] = React.useState('gemini_flash');
-      const [apiKey, setApiKey] = React.useState('AQ.Ab8RN6LfsLBGmYmH_feekfGZHpDaRgzaadfvmR5BJG6BuPOfXQ');
+      const [queryMode, setQueryMode] = React.useState('gemini_flash'); // Switch back to Gemini mode with valid key
+      const [apiKey, setApiKey] = React.useState('AQ.Ab8RN6KvRjCFazkz1IwICL_DoGS311c3qjTR4bJCSsylg9DPfw');
       const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
       const [isDbExplorerOpen, setIsDbExplorerOpen] = React.useState(false);
       const [isExamplesModalOpen, setIsExamplesModalOpen] = React.useState(false);
@@ -1026,9 +1085,13 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       React.useEffect(() => {
         async function testConnection() {
           try {
-            console.log('[Connection Test] Testing Supabase connection...');
-            const testBooks = await fetchFromSupabase('books', { limit: 1 });
+            console.log('[Connection Test] Testing Supabase connection without limit...');
+            const testBooks = await fetchFromSupabase('books'); // No limit to get all rows
             console.log('[Connection Test] SUCCESS - Connected to Supabase, found', testBooks?.length, 'books');
+            
+            if (testBooks && testBooks.length > 0) {
+              console.log('[Connection Test] Sample book:', testBooks[0]);
+            }
           } catch (error) {
             console.error('[Connection Test] FAILED - Could not connect to Supabase:', error);
           }
@@ -1050,15 +1113,31 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
       const loadDbData = async () => {
         setDbLoading(true);
         try {
-          console.log('[DB Explorer] Starting data load...');
+          console.log('[DB Explorer] Starting data load (getting ALL rows)...');
           
-          // Fetch books first
+          // Fetch books first without limit
           const books = await fetchFromSupabase('books');
           console.log('[DB Explorer] Books loaded:', books?.length);
           
-          // Fetch inventory
-          const inventory = await fetchFromSupabase('inventory');
-          console.log('[DB Explorer] Inventory loaded:', inventory?.length);
+          if (books && books.length < 35) {
+            console.warn('[DB Explorer] Only got', books.length, 'books, expected 35. This might be due to RLS policies or API key permissions.');
+          }
+          
+          // Try to fetch inventory (case sensitive)
+          let inventory = [];
+          try {
+            inventory = await fetchFromSupabase('inventory');
+            console.log('[DB Explorer] Inventory loaded (lowercase):', inventory?.length);
+          } catch (invError) {
+            console.log('[DB Explorer] Trying uppercase Inventory...');
+            try {
+              inventory = await fetchFromSupabase('Inventory');
+              console.log('[DB Explorer] Inventory loaded (uppercase):', inventory?.length);
+            } catch (invError2) {
+              console.warn('[DB Explorer] Could not load inventory table, will show books without stock data');
+              inventory = [];
+            }
+          }
           
           // Combine books with inventory
           const inventoryMap = {};
@@ -1068,10 +1147,13 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           
           const booksWithInventory = books.map(book => {
             const inv = inventoryMap[book.book_id] || {};
-            let stockLevel = "Medium Stock";
-            if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-            else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-            else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+            let stockLevel = "Unknown";
+            if (inv.qty_in_stock !== undefined) {
+              if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+              else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+              else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+              else stockLevel = "Medium Stock";
+            }
             
             return {
               id: book.book_id,
@@ -1095,7 +1177,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           setDbEvents(events);
           setDbMerchandise(merchandise);
           
-          console.log('[DB Explorer] Data load complete');
+          console.log('[DB Explorer] Data load complete - displayed', booksWithInventory.length, 'books');
         } catch (error) {
           console.error('[DB Explorer] Error loading data:', error);
           setDbBooks([]);
