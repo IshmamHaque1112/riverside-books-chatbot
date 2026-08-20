@@ -167,23 +167,28 @@
       
       console.log(`[Supabase Request] ${table}:`, url);
       
-      const response = await fetch(url, {
-        headers: {
-          'apikey': SUPABASE_API_KEY,
-          'Authorization': `Bearer ${SUPABASE_API_KEY}`,
-          'Content-Type': 'application/json'
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'apikey': SUPABASE_API_KEY,
+            'Authorization': `Bearer ${SUPABASE_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[Supabase Error] ${table}:`, response.status, errorText);
+          throw new Error(`Supabase error: ${response.status} ${response.statusText} - ${errorText}`);
         }
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Supabase Error] ${table}:`, response.status, errorText);
-        throw new Error(`Supabase error: ${response.status} ${response.statusText} - ${errorText}`);
+        
+        const data = await response.json();
+        console.log(`[Supabase Success] ${table}:`, data.length, 'records');
+        return data;
+      } catch (error) {
+        console.error(`[Supabase Network Error] ${table}:`, error);
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log(`[Supabase Success] ${table}:`, data.length, 'records');
-      return data;
     }
 
     // Get inventory status for a book
@@ -382,41 +387,54 @@
 
           case "advanced_book_search": {
             try {
-              // Fetch all books with their inventory
-              const books = await fetchFromSupabase('books');
-              const inventory = await fetchFromSupabase('inventory');
+              console.log('[advanced_book_search] Starting search with args:', args);
               
-              // Create a map of book_id to inventory data
-              const inventoryMap = {};
-              inventory.forEach(inv => {
-                inventoryMap[inv.book_id] = inv;
-              });
+              // Fetch books
+              const books = await fetchFromSupabase('books');
+              console.log('[advanced_book_search] Books fetched:', books?.length);
+              
+              if (!books || books.length === 0) {
+                return { criteria_applied: args, match_count: 0, results: [] };
+              }
+              
+              // Simple mapping without inventory first
+              let results = books.map(book => ({
+                id: book.book_id,
+                title: book.title,
+                author: book.author,
+                price: book.regular_price,
+                genre: book.genre,
+                isbn: book.isbn,
+                published_year: new Date(book.pub_date).getFullYear(),
+                stock_quantity: 0, // Will be updated if inventory available
+                stock_level: "Unknown"
+              }));
 
-              // Combine books with inventory data
-              let results = books.map(book => {
-                const inv = inventoryMap[book.book_id] || {};
-                let stockLevel = "Medium Stock";
-                if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-                else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-                else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+              // Try to get inventory data
+              try {
+                const inventory = await fetchFromSupabase('inventory');
+                const inventoryMap = {};
+                inventory.forEach(inv => {
+                  inventoryMap[inv.book_id] = inv;
+                });
                 
-                return {
-                  id: book.book_id,
-                  title: book.title,
-                  author: book.author,
-                  price: book.regular_price,
-                  genre: book.genre,
-                  isbn: book.isbn,
-                  published_year: new Date(book.pub_date).getFullYear(),
-                  stock_quantity: inv.qty_in_stock || 0,
-                  stock_level: stockLevel,
-                  needs_reorder: inv.needs_reorder || false,
-                  format: book.format,
-                  rating: book.rating,
-                  bestseller: book.bestseller,
-                  staff_pick: book.staff_pick
-                };
-              });
+                // Update with inventory data
+                results = results.map(book => {
+                  const inv = inventoryMap[book.id] || {};
+                  let stockLevel = "Medium Stock";
+                  if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                  else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                  else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                  
+                  return {
+                    ...book,
+                    stock_quantity: inv.qty_in_stock || 0,
+                    stock_level: stockLevel
+                  };
+                });
+              } catch (invError) {
+                console.warn('[advanced_book_search] Could not fetch inventory:', invError);
+              }
 
               // Apply filters
               if (args.genre && args.genre.trim()) {
@@ -469,13 +487,14 @@
                 results = results.slice(0, args.limit);
               }
 
+              console.log('[advanced_book_search] Results:', results.length);
               return {
                 criteria_applied: args,
                 match_count: results.length,
                 results: results
               };
             } catch (error) {
-              console.error('Error in advanced_book_search:', error);
+              console.error('[advanced_book_search] Error:', error);
               return { error: `Search failed: ${error.message}`, criteria_applied: args, match_count: 0, results: [] };
             }
           }
@@ -909,10 +928,10 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         category: "1. Reservations & Pre-Orders (NEW)",
         icon: "fa-bookmark",
         phrases: [
-          "Please reserve a copy of The Map of Quiet Streets for me",
-          "Can I pre-order Shadows Over Cascadia?",
-          "Hold a copy of Echoes of the River for Jane Doe",
-          "Can I reserve 2 copies of The Whispering Arbor?"
+          "Please reserve a copy of The River of Tides for me",
+          "Can I pre-order Distant Memory?",
+          "Hold a copy of The Painted Kitchen for Jane Doe",
+          "Can I reserve 2 copies of The Wandering Garden?"
         ]
       },
       {
@@ -920,18 +939,19 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         icon: "fa-feather",
         phrases: [
           "Show me fantasy books",
-          "What cookbooks do you carry?",
+          "What science fiction books do you carry?",
           "Find poetry books",
-          "Show me historical fiction"
+          "Show me historical fiction",
+          "What romance novels do you have?"
         ]
       },
       {
         category: "3. Publication Year Filtering",
         icon: "fa-calendar-days",
         phrases: [
-          "Find books published in the year 2021",
+          "Find books published in 2022",
           "Show me books published in 2023",
-          "What books do you have published before 2022?"
+          "What books do you have published before 2023?"
         ]
       },
       {
@@ -939,8 +959,8 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         icon: "fa-tag",
         phrases: [
           "Find books under $20",
-          "Show me books cheaper than $18",
-          "What books cost over $25?"
+          "Show me books cheaper than $25",
+          "What books cost over $30?"
         ]
       },
       {
@@ -949,7 +969,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
         phrases: [
           "Show low stock books",
           "Which books are out of stock?",
-          "List all available books"
+          "List all high stock items"
         ]
       },
       {
@@ -1018,14 +1038,17 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           if (isDbExplorerOpen) {
             setDbLoading(true);
             try {
-              const [books, events, merchandise] = await Promise.all([
-                fetchFromSupabase('books'),
-                fetchFromSupabase('events'),
-                fetchFromSupabase('merchandise')
-              ]);
+              console.log('[DB Explorer] Starting data load...');
+              
+              // Fetch books separately first
+              const books = await fetchFromSupabase('books');
+              console.log('[DB Explorer] Books loaded:', books?.length);
+              
+              // Fetch inventory
+              const inventory = await fetchFromSupabase('inventory');
+              console.log('[DB Explorer] Inventory loaded:', inventory?.length);
               
               // Combine books with inventory
-              const inventory = await fetchFromSupabase('inventory');
               const inventoryMap = {};
               inventory.forEach(inv => {
                 inventoryMap[inv.book_id] = inv;
@@ -1049,11 +1072,23 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
                 };
               });
               
+              // Fetch other data
+              const events = await fetchFromSupabase('events');
+              const merchandise = await fetchFromSupabase('merchandise');
+              
+              console.log('[DB Explorer] Events loaded:', events?.length);
+              console.log('[DB Explorer] Merchandise loaded:', merchandise?.length);
+              
               setDbBooks(booksWithInventory);
               setDbEvents(events);
               setDbMerchandise(merchandise);
+              
+              console.log('[DB Explorer] Data load complete');
             } catch (error) {
-              console.error('Error loading DB Explorer data:', error);
+              console.error('[DB Explorer] Error loading data:', error);
+              setDbBooks([]);
+              setDbEvents([]);
+              setDbMerchandise([]);
             } finally {
               setDbLoading(false);
             }
