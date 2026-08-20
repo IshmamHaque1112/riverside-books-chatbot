@@ -408,12 +408,12 @@
               // Simple mapping without inventory first
               let results = books.map(book => ({
                 id: book.book_id,
-                title: book.title,
-                author: book.author,
-                price: book.regular_price,
-                genre: book.genre,
-                isbn: book.isbn,
-                published_year: new Date(book.pub_date).getFullYear(),
+                title: book.title || 'Unknown Title',
+                author: book.author || 'Unknown Author',
+                price: book.regular_price || 0,
+                genre: book.genre || 'Unknown Genre',
+                isbn: book.isbn || 'Unknown ISBN',
+                published_year: book.pub_date ? new Date(book.pub_date).getFullYear() : 'Unknown',
                 stock_quantity: 0, // Will be updated if inventory available
                 stock_level: "Unknown"
               }));
@@ -590,9 +590,9 @@
               });
 
               const matches = books.filter(b => 
-                b.title.toLowerCase().includes(q) || 
-                b.author.toLowerCase().includes(q) || 
-                b.genre.toLowerCase().includes(q)
+                (b.title && b.title.toLowerCase().includes(q)) || 
+                (b.author && b.author.toLowerCase().includes(q)) || 
+                (b.genre && b.genre.toLowerCase().includes(q))
               ).map(book => {
                 const inv = inventoryMap[book.book_id] || {};
                 let stockLevel = "Medium Stock";
@@ -602,11 +602,11 @@
                 
                 return {
                   id: book.book_id,
-                  title: book.title,
-                  author: book.author,
-                  price: book.regular_price,
-                  genre: book.genre,
-                  published_year: new Date(book.pub_date).getFullYear(),
+                  title: book.title || 'Unknown Title',
+                  author: book.author || 'Unknown Author',
+                  price: book.regular_price || 0,
+                  genre: book.genre || 'Unknown Genre',
+                  published_year: book.pub_date ? new Date(book.pub_date).getFullYear() : 'Unknown',
                   stock_quantity: inv.qty_in_stock || 0,
                   stock_level: stockLevel
                 };
@@ -877,7 +877,7 @@
       } else if (toolName === "advanced_book_search") {
         if (dbData.results && dbData.results.length > 0) {
           const list = dbData.results.map(b => 
-            `• **${b.title}** by ${b.author} - $${b.price.toFixed(2)} (${b.genre}, ${b.published_year}) [**${b.stock_quantity} in stock**]`
+            `• **${b.title}** by ${b.author} - $${b.price ? b.price.toFixed(2) : 'N/A'} (${b.genre}, ${b.published_year}) [**${b.stock_quantity} in stock**]`
           ).join("\n");
           
           responseText = `Here are matching books from our database:\n\n${list}\n\nWant to place a hold or pre-order any title? Just ask!`;
@@ -890,7 +890,7 @@
       } else if (toolName === "relational_event_books") {
         const eventsList = dbData.events_with_inventory.map(e => {
           const bookInfo = e.book_details 
-            ? `📖 *${e.book_details.title}* ($${e.book_details.price.toFixed(2)} - ${e.book_details.stock_quantity} in stock)`
+            ? `📖 *${e.book_details.title}* ($${e.book_details.price ? e.book_details.price.toFixed(2) : 'N/A'} - ${e.book_details.stock_quantity} in stock)`
             : '📖 Featured title details available at counter';
           return `• **${e.title}**\n  📆 Date: ${e.event_date} (${e.time})\n  ${bookInfo}`;
         }).join("\n\n");
@@ -908,7 +908,7 @@
         responseText = `**${dbData.store_name}**\n${dbData.about_text}\n\n📍 **Address:** ${dbData.address}\n📞 **Phone:** ${dbData.phone}`;
       } else if (toolName === "search_merchandise") {
         if (dbData.results && dbData.results.length > 0) {
-          const items = dbData.results.map(m => `• **${m.item_name}** ($${m.price.toFixed(2)}) - ${m.stock_quantity} available`).join("\n");
+          const items = dbData.results.map(m => `• **${m.item_name}** ($${m.price ? m.price.toFixed(2) : 'N/A'}) - ${m.stock_quantity} available`).join("\n");
           responseText = `Here is what we found in our gift and merchandise inventory:\n\n${items}`;
         } else {
           responseText = `We carry canvas tote bags, brass bookmarks, ceramic mugs, and hardcover reading journals!`;
@@ -1108,10 +1108,10 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
             
             return {
               id: book.book_id,
-              title: book.title,
-              author: book.author,
-              price: book.regular_price,
-              genre: book.genre,
+              title: book.title || 'Unknown Title',
+              author: book.author || 'Unknown Author',
+              price: book.regular_price || 0,
+              genre: book.genre || 'Unknown Genre',
               stock_quantity: inv.qty_in_stock || 0,
               stock_level: stockLevel
             };
@@ -1651,7 +1651,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
                                 <td className="p-2.5 font-semibold text-mahogany-900">{book.title}</td>
                                 <td className="p-2.5">{book.author}</td>
                                 <td className="p-2.5">{book.genre}</td>
-                                <td className="p-2.5 font-mono">${book.price.toFixed(2)}</td>
+                                <td className="p-2.5 font-mono">${book.price ? book.price.toFixed(2) : 'N/A'}</td>
                                 <td className="p-2.5 font-mono font-bold">{book.stock_quantity}</td>
                                 <td className="p-2.5">
                                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1732,7 +1732,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
                               <tr key={item.item_id} className="hover:bg-parchment-100">
                                 <td className="p-2.5 font-semibold text-mahogany-900">{item.item_name}</td>
                                 <td className="p-2.5">{item.item_type}</td>
-                                <td className="p-2.5 font-mono">${item.price.toFixed(2)}</td>
+                                <td className="p-2.5 font-mono">${item.price ? item.price.toFixed(2) : 'N/A'}</td>
                               </tr>
                             ))}
                           </tbody>
