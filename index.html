@@ -90,7 +90,8 @@
   <script type="text/babel">
     // Supabase Configuration
     const SUPABASE_URL = "https://wulylpywtdgoxamwlxlu.supabase.co";
-    const SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind1bHlscHl3dGRnb3hhbXdseGx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTgyMjYsImV4cCI6MjEwMjczNDIyNn0.6usgf9zXJ3ewsRrklNPBX1ByrAPybWsd2UGc2BPg_-I";
+    const SUPABASE_API_KEY = "sbp_3ab1093fd7cfd53088b55fa18eed35742a93f0d2";
+    const SUPABASE_PROJECT_REF = "wulylpywtdgoxamwlxlu";
 
     // Store info from CSV data (since table doesn't exist in Supabase)
     const STORE_INFO = {
@@ -114,12 +115,21 @@
     async function getAvailableGenres() {
       try {
         const books = await fetchFromSupabase('books');
-        const uniqueGenres = [...new Set(books.map(b => b.genre))].sort();
-        return uniqueGenres.length > 0 ? uniqueGenres : [
-          "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
-          "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
-          "Poetry", "Children's", "Memoir", "Essay Collection"
-        ];
+        if (books && books.length > 0) {
+          const uniqueGenres = [...new Set(books.map(b => b.genre))].sort();
+          return uniqueGenres.length > 0 ? uniqueGenres : [
+            "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
+            "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
+            "Poetry", "Children's", "Memoir", "Essay Collection"
+          ];
+        } else {
+          console.warn('No books found, using fallback genres');
+          return [
+            "Literary Fiction", "Historical Fiction", "Fantasy", "Science Fiction",
+            "Mystery", "Thriller", "Romance", "Cookbook", "Nature", "History",
+            "Poetry", "Children's", "Memoir", "Essay Collection"
+          ];
+        }
       } catch (error) {
         console.error('Error fetching genres:', error);
         return [
@@ -153,6 +163,8 @@
         url += `&limit=${limit}`;
       }
       
+      console.log(`[Supabase Request] ${table}:`, url);
+      
       const response = await fetch(url, {
         headers: {
           'apikey': SUPABASE_API_KEY,
@@ -162,10 +174,14 @@
       });
       
       if (!response.ok) {
-        throw new Error(`Supabase error: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[Supabase Error] ${table}:`, response.status, errorText);
+        throw new Error(`Supabase error: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
-      return response.json();
+      const data = await response.json();
+      console.log(`[Supabase Success] ${table}:`, data.length, 'records');
+      return data;
     }
 
     // Get inventory status for a book
@@ -189,6 +205,8 @@
             needs_reorder: inv.needs_reorder,
             low_stock_threshold: inv.low_stock_threshold
           };
+        } else {
+          console.warn(`No inventory found for book_id: ${bookId}`);
         }
       } catch (error) {
         console.error('Error fetching inventory:', error);
@@ -314,226 +332,252 @@
       try {
         switch(name) {
           case "reserve_book_copy": {
-            // Find the book by title
-            const books = await fetchFromSupabase('books');
-            const bookTitleQuery = (args.book_title || "").toLowerCase().trim();
-            const bookMatch = books.find(b => b.title.toLowerCase().includes(bookTitleQuery));
-            
-            const reservationId = "RES-" + Math.floor(100000 + Math.random() * 900000);
-            const quantity = args.quantity || 1;
-            const customerName = args.customer_name || "Valued Customer";
-            const contact = args.email_or_phone || "(503) 555-0192";
+            try {
+              // Find the book by title
+              const books = await fetchFromSupabase('books');
+              const bookTitleQuery = (args.book_title || "").toLowerCase().trim();
+              const bookMatch = books.find(b => b.title.toLowerCase().includes(bookTitleQuery));
+              
+              const reservationId = "RES-" + Math.floor(100000 + Math.random() * 900000);
+              const quantity = args.quantity || 1;
+              const customerName = args.customer_name || "Valued Customer";
+              const contact = args.email_or_phone || "(503) 555-0192";
 
-            // Get inventory status
-            let stockStatus = { stock_quantity: 0, stock_level: "Out of Stock" };
-            if (bookMatch) {
-              stockStatus = await getBookInventoryStatus(bookMatch.book_id);
+              // Get inventory status
+              let stockStatus = { stock_quantity: 0, stock_level: "Out of Stock" };
+              if (bookMatch) {
+                stockStatus = await getBookInventoryStatus(bookMatch.book_id);
+              }
+
+              const newReservation = {
+                id: reservationId,
+                book_title: bookMatch ? bookMatch.title : args.book_title,
+                book_id: bookMatch ? bookMatch.book_id : null,
+                customer_name: customerName,
+                contact: contact,
+                quantity: quantity,
+                timestamp: new Date().toLocaleString(),
+                status: stockStatus.stock_quantity > 0 ? "Held for Pickup" : "Pre-order Queued (Restocking Soon)"
+              };
+
+              return {
+                success: true,
+                reservation_id: reservationId,
+                reservation_details: newReservation,
+                book_stock_status: stockStatus
+              };
+            } catch (error) {
+              console.error('Error in reserve_book_copy:', error);
+              return { 
+                success: false, 
+                error: `Reservation failed: ${error.message}`,
+                reservation_id: null,
+                reservation_details: null,
+                book_stock_status: { stock_quantity: 0, stock_level: "Unknown" }
+              };
             }
-
-            const newReservation = {
-              id: reservationId,
-              book_title: bookMatch ? bookMatch.title : args.book_title,
-              book_id: bookMatch ? bookMatch.book_id : null,
-              customer_name: customerName,
-              contact: contact,
-              quantity: quantity,
-              timestamp: new Date().toLocaleString(),
-              status: stockStatus.stock_quantity > 0 ? "Held for Pickup" : "Pre-order Queued (Restocking Soon)"
-            };
-
-            return {
-              success: true,
-              reservation_id: reservationId,
-              reservation_details: newReservation,
-              book_stock_status: stockStatus
-            };
           }
 
           case "advanced_book_search": {
-            // Fetch all books with their inventory
-            const books = await fetchFromSupabase('books');
-            const inventory = await fetchFromSupabase('inventory');
-            
-            // Create a map of book_id to inventory data
-            const inventoryMap = {};
-            inventory.forEach(inv => {
-              inventoryMap[inv.book_id] = inv;
-            });
-
-            // Combine books with inventory data
-            let results = books.map(book => {
-              const inv = inventoryMap[book.book_id] || {};
-              let stockLevel = "Medium Stock";
-              if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-              else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-              else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+            try {
+              // Fetch all books with their inventory
+              const books = await fetchFromSupabase('books');
+              const inventory = await fetchFromSupabase('inventory');
               
+              // Create a map of book_id to inventory data
+              const inventoryMap = {};
+              inventory.forEach(inv => {
+                inventoryMap[inv.book_id] = inv;
+              });
+
+              // Combine books with inventory data
+              let results = books.map(book => {
+                const inv = inventoryMap[book.book_id] || {};
+                let stockLevel = "Medium Stock";
+                if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                
+                return {
+                  id: book.book_id,
+                  title: book.title,
+                  author: book.author,
+                  price: book.regular_price,
+                  genre: book.genre,
+                  isbn: book.isbn,
+                  published_year: new Date(book.pub_date).getFullYear(),
+                  stock_quantity: inv.qty_in_stock || 0,
+                  stock_level: stockLevel,
+                  needs_reorder: inv.needs_reorder || false,
+                  format: book.format,
+                  rating: book.rating,
+                  bestseller: book.bestseller,
+                  staff_pick: book.staff_pick
+                };
+              });
+
+              // Apply filters
+              if (args.genre && args.genre.trim()) {
+                const searchGenre = args.genre.toLowerCase().trim();
+                results = results.filter(b => b.genre.toLowerCase().includes(searchGenre));
+              }
+
+              if (args.query && args.query.trim()) {
+                const q = args.query.toLowerCase().trim();
+                results = results.filter(b => 
+                  b.title.toLowerCase().includes(q) || 
+                  b.author.toLowerCase().includes(q) || 
+                  b.genre.toLowerCase().includes(q)
+                );
+              }
+
+              if (typeof args.max_price === 'number') {
+                results = results.filter(b => b.price <= args.max_price);
+              }
+              if (typeof args.min_price === 'number') {
+                results = results.filter(b => b.price >= args.min_price);
+              }
+
+              if (typeof args.published_year === 'number') {
+                results = results.filter(b => b.published_year === args.published_year);
+              }
+
+              if (typeof args.published_after === 'number') {
+                results = results.filter(b => b.published_year >= args.published_after);
+              }
+              if (typeof args.published_before === 'number') {
+                results = results.filter(b => b.published_year <= args.published_before);
+              }
+
+              if (args.stock_status) {
+                if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
+                else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 5);
+                else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
+              }
+
+              if (args.sort_by) {
+                if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
+                else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
+                else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
+                else if (args.sort_by === 'year_asc') results.sort((a,b) => a.published_year - b.published_year);
+                else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
+              }
+
+              if (typeof args.limit === 'number' && args.limit > 0) {
+                results = results.slice(0, args.limit);
+              }
+
               return {
-                id: book.book_id,
-                title: book.title,
-                author: book.author,
-                price: book.regular_price,
-                genre: book.genre,
-                isbn: book.isbn,
-                published_year: new Date(book.pub_date).getFullYear(),
-                stock_quantity: inv.qty_in_stock || 0,
-                stock_level: stockLevel,
-                needs_reorder: inv.needs_reorder || false,
-                format: book.format,
-                rating: book.rating,
-                bestseller: book.bestseller,
-                staff_pick: book.staff_pick
+                criteria_applied: args,
+                match_count: results.length,
+                results: results
               };
-            });
-
-            // Apply filters
-            if (args.genre && args.genre.trim()) {
-              const searchGenre = args.genre.toLowerCase().trim();
-              results = results.filter(b => b.genre.toLowerCase().includes(searchGenre));
+            } catch (error) {
+              console.error('Error in advanced_book_search:', error);
+              return { error: `Search failed: ${error.message}`, criteria_applied: args, match_count: 0, results: [] };
             }
-
-            if (args.query && args.query.trim()) {
-              const q = args.query.toLowerCase().trim();
-              results = results.filter(b => 
-                b.title.toLowerCase().includes(q) || 
-                b.author.toLowerCase().includes(q) || 
-                b.genre.toLowerCase().includes(q)
-              );
-            }
-
-            if (typeof args.max_price === 'number') {
-              results = results.filter(b => b.price <= args.max_price);
-            }
-            if (typeof args.min_price === 'number') {
-              results = results.filter(b => b.price >= args.min_price);
-            }
-
-            if (typeof args.published_year === 'number') {
-              results = results.filter(b => b.published_year === args.published_year);
-            }
-
-            if (typeof args.published_after === 'number') {
-              results = results.filter(b => b.published_year >= args.published_after);
-            }
-            if (typeof args.published_before === 'number') {
-              results = results.filter(b => b.published_year <= args.published_before);
-            }
-
-            if (args.stock_status) {
-              if (args.stock_status === 'in_stock') results = results.filter(b => b.stock_quantity > 0);
-              else if (args.stock_status === 'low_stock') results = results.filter(b => b.stock_quantity > 0 && b.stock_quantity <= 5);
-              else if (args.stock_status === 'out_of_stock') results = results.filter(b => b.stock_quantity === 0);
-            }
-
-            if (args.sort_by) {
-              if (args.sort_by === 'price_asc') results.sort((a,b) => a.price - b.price);
-              else if (args.sort_by === 'price_desc') results.sort((a,b) => b.price - a.price);
-              else if (args.sort_by === 'year_desc') results.sort((a,b) => b.published_year - a.published_year);
-              else if (args.sort_by === 'year_asc') results.sort((a,b) => a.published_year - b.published_year);
-              else if (args.sort_by === 'title') results.sort((a,b) => a.title.localeCompare(b.title));
-            }
-
-            if (typeof args.limit === 'number' && args.limit > 0) {
-              results = results.slice(0, args.limit);
-            }
-
-            return {
-              criteria_applied: args,
-              match_count: results.length,
-              results: results
-            };
           }
 
           case "relational_event_books": {
-            const events = await fetchFromSupabase('events');
-            const books = await fetchFromSupabase('books');
-            const inventory = await fetchFromSupabase('inventory');
-            
-            // Create inventory map
-            const inventoryMap = {};
-            inventory.forEach(inv => {
-              inventoryMap[inv.book_id] = inv;
-            });
+            try {
+              const events = await fetchFromSupabase('events');
+              const books = await fetchFromSupabase('books');
+              const inventory = await fetchFromSupabase('inventory');
+              
+              // Create inventory map
+              const inventoryMap = {};
+              inventory.forEach(inv => {
+                inventoryMap[inv.book_id] = inv;
+              });
 
-            const joinedEvents = await Promise.all(events.map(async event => {
-              let bookDetails = null;
-              if (event.book_id) {
-                const book = books.find(b => b.book_id === event.book_id);
-                if (book) {
-                  const inv = inventoryMap[book.book_id] || {};
-                  let stockLevel = "Medium Stock";
-                  if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-                  else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-                  else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
-                  
-                  bookDetails = {
-                    id: book.book_id,
-                    title: book.title,
-                    author: book.author,
-                    price: book.regular_price,
-                    stock_quantity: inv.qty_in_stock || 0,
-                    stock_level: stockLevel
-                  };
+              const joinedEvents = await Promise.all(events.map(async event => {
+                let bookDetails = null;
+                if (event.book_id) {
+                  const book = books.find(b => b.book_id === event.book_id);
+                  if (book) {
+                    const inv = inventoryMap[book.book_id] || {};
+                    let stockLevel = "Medium Stock";
+                    if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                    else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                    else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                    
+                    bookDetails = {
+                      id: book.book_id,
+                      title: book.title,
+                      author: book.author,
+                      price: book.regular_price,
+                      stock_quantity: inv.qty_in_stock || 0,
+                      stock_level: stockLevel
+                    };
+                  }
                 }
-              }
+                
+                return {
+                  id: event.event_id,
+                  title: event.event_name,
+                  event_date: event.event_date,
+                  time: event.event_time,
+                  location: event.event_location,
+                  description: event.event_description,
+                  book_id: event.book_id,
+                  ticket_price: event.ticket_price,
+                  book_details: bookDetails
+                };
+              }));
               
               return {
-                id: event.event_id,
-                title: event.event_name,
-                event_date: event.event_date,
-                time: event.event_time,
-                location: event.event_location,
-                description: event.event_description,
-                book_id: event.book_id,
-                ticket_price: event.ticket_price,
-                book_details: bookDetails
+                joined_records: joinedEvents.length,
+                events_with_inventory: joinedEvents
               };
-            }));
-            
-            return {
-              joined_records: joinedEvents.length,
-              events_with_inventory: joinedEvents
-            };
+            } catch (error) {
+              console.error('Error in relational_event_books:', error);
+              return { error: `Events query failed: ${error.message}`, joined_records: 0, events_with_inventory: [] };
+            }
           }
 
           case "search_books": {
-            const q = (args.query || "").toLowerCase();
-            const books = await fetchFromSupabase('books');
-            const inventory = await fetchFromSupabase('inventory');
-            
-            const inventoryMap = {};
-            inventory.forEach(inv => {
-              inventoryMap[inv.book_id] = inv;
-            });
+            try {
+              const q = (args.query || "").toLowerCase();
+              const books = await fetchFromSupabase('books');
+              const inventory = await fetchFromSupabase('inventory');
+              
+              const inventoryMap = {};
+              inventory.forEach(inv => {
+                inventoryMap[inv.book_id] = inv;
+              });
 
-            const matches = books.filter(b => 
-              b.title.toLowerCase().includes(q) || 
-              b.author.toLowerCase().includes(q) || 
-              b.genre.toLowerCase().includes(q)
-            ).map(book => {
-              const inv = inventoryMap[book.book_id] || {};
-              let stockLevel = "Medium Stock";
-              if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
-              else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
-              else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+              const matches = books.filter(b => 
+                b.title.toLowerCase().includes(q) || 
+                b.author.toLowerCase().includes(q) || 
+                b.genre.toLowerCase().includes(q)
+              ).map(book => {
+                const inv = inventoryMap[book.book_id] || {};
+                let stockLevel = "Medium Stock";
+                if (inv.qty_in_stock === 0) stockLevel = "Out of Stock";
+                else if (inv.qty_in_stock <= inv.low_stock_threshold) stockLevel = "Low Stock";
+                else if (inv.qty_in_stock >= 10) stockLevel = "High Stock";
+                
+                return {
+                  id: book.book_id,
+                  title: book.title,
+                  author: book.author,
+                  price: book.regular_price,
+                  genre: book.genre,
+                  published_year: new Date(book.pub_date).getFullYear(),
+                  stock_quantity: inv.qty_in_stock || 0,
+                  stock_level: stockLevel
+                };
+              });
               
               return {
-                id: book.book_id,
-                title: book.title,
-                author: book.author,
-                price: book.regular_price,
-                genre: book.genre,
-                published_year: new Date(book.pub_date).getFullYear(),
-                stock_quantity: inv.qty_in_stock || 0,
-                stock_level: stockLevel
+                query: args.query,
+                match_count: matches.length,
+                results: matches
               };
-            });
-            
-            return {
-              query: args.query,
-              match_count: matches.length,
-              results: matches
-            };
+            } catch (error) {
+              console.error('Error in search_books:', error);
+              return { error: `Search failed: ${error.message}`, query: args.query, match_count: 0, results: [] };
+            }
           }
 
           case "get_store_hours": {
@@ -561,34 +605,44 @@
           }
 
           case "get_available_genres": {
-            const genres = await getAvailableGenres();
-            return {
-              genres: genres
-            };
+            try {
+              const genres = await getAvailableGenres();
+              return {
+                genres: genres
+              };
+            } catch (error) {
+              console.error('Error in get_available_genres:', error);
+              return { error: `Genres query failed: ${error.message}`, genres: [] };
+            }
           }
 
           case "get_upcoming_events": {
-            const limit = args.limit || 5;
-            const events = await fetchFromSupabase('events', {
-              orderBy: { column: 'event_date', ascending: true },
-              limit: limit
-            });
-            
-            const upcomingEvents = events.map(event => ({
-              id: event.event_id,
-              title: event.event_name,
-              event_date: event.event_date,
-              time: event.event_time,
-              location: event.event_location,
-              description: event.event_description,
-              book_id: event.book_id,
-              ticket_price: event.ticket_price
-            }));
-            
-            return {
-              total_events: events.length,
-              upcoming_events: upcomingEvents
-            };
+            try {
+              const limit = args.limit || 5;
+              const events = await fetchFromSupabase('events', {
+                orderBy: { column: 'event_date', ascending: true },
+                limit: limit
+              });
+              
+              const upcomingEvents = events.map(event => ({
+                id: event.event_id,
+                title: event.event_name,
+                event_date: event.event_date,
+                time: event.event_time,
+                location: event.event_location,
+                description: event.event_description,
+                book_id: event.book_id,
+                ticket_price: event.ticket_price
+              }));
+              
+              return {
+                total_events: events.length,
+                upcoming_events: upcomingEvents
+              };
+            } catch (error) {
+              console.error('Error in get_upcoming_events:', error);
+              return { error: `Events query failed: ${error.message}`, total_events: 0, upcoming_events: [] };
+            }
           }
 
           case "get_about_store": {
@@ -603,29 +657,34 @@
           }
 
           case "search_merchandise": {
-            const q = (args.query || "").toLowerCase();
-            const merchandise = await fetchFromSupabase('merchandise');
-            
-            let items = merchandise.filter(m => 
-              m.item_name.toLowerCase().includes(q) || 
-              m.item_type.toLowerCase().includes(q)
-            );
-            
-            if (typeof args.max_price === 'number') {
-              items = items.filter(m => m.price <= args.max_price);
+            try {
+              const q = (args.query || "").toLowerCase();
+              const merchandise = await fetchFromSupabase('merchandise');
+              
+              let items = merchandise.filter(m => 
+                m.item_name.toLowerCase().includes(q) || 
+                m.item_type.toLowerCase().includes(q)
+              );
+              
+              if (typeof args.max_price === 'number') {
+                items = items.filter(m => m.price <= args.max_price);
+              }
+              
+              const results = items.map(item => ({
+                id: item.item_id,
+                item_name: item.item_name,
+                category: item.item_type,
+                price: item.price
+              }));
+              
+              return {
+                query: args.query,
+                results: results
+              };
+            } catch (error) {
+              console.error('Error in search_merchandise:', error);
+              return { error: `Merchandise search failed: ${error.message}`, query: args.query, results: [] };
             }
-            
-            const results = items.map(item => ({
-              id: item.item_id,
-              item_name: item.item_name,
-              category: item.item_type,
-              price: item.price
-            }));
-            
-            return {
-              query: args.query,
-              results: results
-            };
           }
 
           default:
@@ -649,10 +708,12 @@
         let foundTitle = null;
         try {
           const books = await fetchFromSupabase('books');
-          for (const b of books) {
-            if (input.includes(b.title.toLowerCase())) {
-              foundTitle = b.title;
-              break;
+          if (books && books.length > 0) {
+            for (const b of books) {
+              if (input.includes(b.title.toLowerCase())) {
+                foundTitle = b.title;
+                break;
+              }
             }
           }
         } catch (error) {
@@ -716,7 +777,9 @@
         }
         if (!extractedGenre) {
           if (input.includes("science fiction")) extractedGenre = "Science Fiction";
-          else if (input.includes("fiction") && !input.includes("historical")) extractedGenre = "Literary Fiction";
+          else if (input.includes("literary fiction")) extractedGenre = "Literary Fiction";
+          else if (input.includes("fiction") && !input.includes("historical") && !input.includes("literary")) extractedGenre = "Literary Fiction";
+          else if (input.includes("historical fiction")) extractedGenre = "Historical Fiction";
           else if (input.includes("historical")) extractedGenre = "Historical Fiction";
           else if (input.includes("fantasy")) extractedGenre = "Fantasy";
           else if (input.includes("mystery")) extractedGenre = "Mystery";
