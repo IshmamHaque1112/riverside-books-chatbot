@@ -939,9 +939,26 @@
           customer_name: "Valued Customer",
           email_or_phone: "(503) 555-0192"
         };
+      } else if (
+        /\b(do you have|do you sell|do you carry|got)\b.*\b(tote|mug|journal|bookmark|card|gift|candle|pin|socks|notebook|puzzle|sticker|postcard|tumbler|notecard)\b/i.test(input)
+      ) {
+        // A specific "do you have/sell/carry the [item]" pattern is an
+        // unambiguous product lookup — it should win even when the product
+        // NAME happens to contain a word that would otherwise trigger a
+        // different route (e.g. "Reading Is A River Mug" contains "reading",
+        // "Birthday Books Card" contains "birthday", "Book Club Tumbler"
+        // contains "club" — none of those are what the customer meant).
+        toolName = "search_merchandise";
+        const rawMerchQuery = input
+          .replace(/\b(cheapest|least expensive|most expensive|priciest|do you have|do you sell|what'?s|what|is|are|any|the|a|an|your|my|in|for|of|could|would|buy|get|purchase|got|need|want|looking|gifts?|cards?|items?|shop|store|things?|stuff)\b/gi, '')
+          .replace(/[^\w\s]/g, ' ')
+          .trim();
+        toolArgs = {
+          query: (meaningfulTokens(rawMerchQuery).length > 0) ? rawMerchQuery : undefined
+        };
       } else if (input.includes("instagram") || input.includes("tiktok") || input.includes("social media") || (input.includes("website") && !input.includes("event")) || (input.includes("app") && (input.includes("order") || input.includes("store")))) {
         toolName = "get_social_links";
-      } else if (input.includes("event") && (input.includes("book") || input.includes("stock"))) {
+      } else if (input.includes("event") && (/\bbook\b/i.test(input) || input.includes("stock"))) {
         toolName = "relational_event_books";
       } else if (
         input.includes("event") || input.includes("signing") || input.includes("club") ||
