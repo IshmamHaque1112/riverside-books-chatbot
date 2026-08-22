@@ -973,11 +973,11 @@
         input.includes("talk") || input.includes("reading") || input.includes("fair") ||
         input.includes("tasting") || input.includes("workshop") || input.includes("story hour") ||
         input.includes("author reading") || input.includes("author event") || input.includes("ticket") ||
-        input.includes("happening")
+        input.includes("happening") || input.includes("illustrator") || input.includes("meet the")
       ) {
         toolName = "get_upcoming_events";
         const rawEventQuery = input
-          .replace(/\b(event|events|signing|club|talk|reading|fair|tasting|workshop|story hour|author|ticket|tickets|happening|is|there|do|you|have|any|at|on|in|the|a|an|being|held|start|starts|starting|time|what|whats|whens|when|where|how|much|free|paid|price|this|coming|weekend|next|second|two|separate|scheduled)\b/gi, '')
+          .replace(/\b(event|events|signing|club|talk|reading|fair|tasting|workshop|story hour|author|illustrator|meet|ticket|tickets|happening|is|there|do|you|have|any|at|on|in|the|a|an|being|held|start|starts|starting|time|what|whats|whens|when|where|how|much|free|paid|price|this|coming|weekend|next|second|two|separate|scheduled|related|specific|to|about|tell|me)\b/gi, '')
           .replace(/[^\w\s]/g, ' ')
           .trim();
         toolArgs = {
@@ -994,7 +994,7 @@
         toolName = "get_available_genres";
       } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email")) {
         toolName = "get_about_store";
-      } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark") || input.includes("card") || input.includes("gift")) {
+      } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark") || input.includes("card") || input.includes("gift") || input.includes("candle") || input.includes("pin") || input.includes("socks") || input.includes("notebook") || input.includes("puzzle") || input.includes("sticker") || input.includes("postcard") || input.includes("tumbler") || input.includes("notecard")) {
         toolName = "search_merchandise";
         const cheapestMerch = input.includes("cheapest") || input.includes("least expensive");
         const priciestMerch = input.includes("most expensive") || input.includes("priciest");
@@ -1078,7 +1078,7 @@
           .replace(/\b(20\d{2}|19\d{2})\b/g, '')
           .replace(new RegExp(knownGenres.join('|'), 'gi'), '')
           .replace(/\b(high stock|low stock|out of stock|sold out|in stock|available|running low)\b/gi, '')
-          .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category|isbn|number|format|hardcover|softcover|paperback|cover|edition|who|wrote|writes|written|author of|is|was|are|the|a|an|of|for|what|whats|what's|bestseller|best seller|staff pick|staff recommend|recommend|cheapest|least expensive|lowest price|most expensive|priciest|highest price|highest rated|best rated|top rated)\b/gi, '')
+          .replace(/\b(do you have|can i find|show me|find|search|list|get|are there|any|books?|copies|published|year|price|cost|under|below|above|before|after|in|stock|low|out of|available|genre|category|isbn|number|format|hardcover|softcover|paperback|cover|edition|who|wrote|writes|written|author of|was|are|is|the|a|an|of|for|what's|whats|what|bestseller|best seller|staff pick|staff recommend|recommend|cheapest|least expensive|lowest price|most expensive|priciest|highest price|highest rated|best rated|top rated)\b/gi, '')
           .replace(/[^\w\s]/g, '')
           .trim();
 
