@@ -234,6 +234,14 @@
       'shall','have','has','had','about','any','some','if','still','yet','get','got','guys','idk',
       'thing','name','carry','shelf','sell','buy','still','just','really','also','please','thanks',
       'yeah','yep','nah','okay','ok',
+      // Currency words: the numeric price itself is already pulled out by
+      // maxPriceMatch upstream, but the word describing the currency
+      // ("dollars", "$20 dollars", "20 bucks") is left behind in cleanQuery.
+      // Without stripping it here, it survives as the only "meaningful"
+      // token and gets applied as a bogus second filter requiring some
+      // book's title/author/genre to literally contain "dollars" — which
+      // none do, silently zeroing out an otherwise-correct price search.
+      'dollar','dollars','buck','bucks','usd','cents','cent',
       // Framing/filler words that survive even after a structured filter
       // (genre, staff_pick, bestseller, published_year...) has already been
       // pulled out of the same phrase — without this, the leftover word
