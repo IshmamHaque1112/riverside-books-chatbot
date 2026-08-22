@@ -249,7 +249,10 @@
       'anything','author','named','from','looking','title','titled','book','books',
       'collection','collections','staff','member','members','came','come','out',
       'kind','kinds','type','types','category','categories','recommend','recommended',
-      'recommendation','bestseller','bestsellers','seller','pick','picks','copy','copies'
+      'recommendation','bestseller','bestsellers','seller','pick','picks','copy','copies',
+      'not','remember','exact','but','has','order','ordering','notified','notify','notification',
+      'when','back','custom','else','besides','soon','meeting','join','does','want','wanted',
+      'give','tell','idk','know','don','dont','ll','ve','re','between'
     ]);
 
     function meaningfulTokens(text) {
@@ -269,9 +272,9 @@
       if (!q) return false;
       if (t.includes(q)) return true;
 
-      const textWords = t.split(/\s+/).filter(Boolean);
+      const textWords = meaningfulTokens(t);
       const queryWords = meaningfulTokens(q);
-      if (queryWords.length === 0) return false;
+      if (queryWords.length === 0 || textWords.length === 0) return false;
 
       const matchedCount = queryWords.filter(qw =>
         textWords.some(tw => {
@@ -289,7 +292,7 @@
         })
       ).length;
 
-      return (matchedCount / queryWords.length) >= 0.6;
+      return (matchedCount / queryWords.length) >= 0.6 || matchedCount >= 2;
     }
 
     // Get inventory status for a book
@@ -415,7 +418,9 @@
           type: "OBJECT",
           properties: {
             limit: { type: "NUMBER", description: "Maximum number of events to return" },
-            query: { type: "STRING", description: "Optional event name or book title keywords to narrow results, e.g. 'Local History Talk' or 'Blue Shadows'." }
+            query: { type: "STRING", description: "Optional event name or book title keywords to narrow results, e.g. 'Local History Talk' or 'Blue Shadows'." },
+            month: { type: "NUMBER", description: "Filter to events in this calendar month (1-12), e.g. 12 for December." },
+            free_only: { type: "BOOLEAN", description: "true for free events only (ticket_price = 0), false for paid events only." }
           }
         }
       },
@@ -832,6 +837,19 @@
                 ticket_price: event.ticket_price
               }));
 
+              if (typeof args.month === 'number') {
+                upcomingEvents = upcomingEvents.filter(e => {
+                  const d = new Date(e.event_date + 'T00:00:00');
+                  return (d.getMonth() + 1) === args.month;
+                });
+              }
+
+              if (args.free_only === true) {
+                upcomingEvents = upcomingEvents.filter(e => e.ticket_price === 0);
+              } else if (args.free_only === false) {
+                upcomingEvents = upcomingEvents.filter(e => e.ticket_price > 0);
+              }
+
               if (args.query && meaningfulTokens(args.query).length > 0) {
                 const filtered = upcomingEvents.filter(e =>
                   fuzzyTextMatch(e.title, args.query) || fuzzyTextMatch(e.description || '', args.query)
@@ -870,10 +888,8 @@
               const q = (args.query || "").toLowerCase();
               const merchandise = await fetchFromSupabase('merchandise');
               
-              let items = merchandise.filter(m => 
-                !q || fuzzyTextMatch(m.item_name, q) || fuzzyTextMatch(m.item_type, q)
-              );
-              
+              let items = merchandise.slice();
+
               if (typeof args.max_price === 'number') {
                 items = items.filter(m => m.price <= args.max_price);
               }
@@ -884,6 +900,17 @@
                 const wantType = args.item_type.trim().toLowerCase();
                 items = items.filter(m => m.item_type.toLowerCase() === wantType);
               }
+
+              if (q) {
+                const textFiltered = items.filter(m => fuzzyTextMatch(m.item_name, q) || fuzzyTextMatch(m.item_type, q));
+                // Only apply the text filter if it actually found something
+                // within the already-narrowed (price/type) set — otherwise
+                // a generic descriptor like "greeting" (no item is literally
+                // named that) would wipe out an otherwise-correct "Cards
+                // under $20" browse down to zero.
+                if (textFiltered.length > 0) items = textFiltered;
+              }
+
               if (args.sort_by === 'price_asc') items.sort((a,b) => a.price - b.price);
               else if (args.sort_by === 'price_desc') items.sort((a,b) => b.price - a.price);
               if (typeof args.limit === 'number' && args.limit > 0) {
@@ -916,7 +943,124 @@
       }
     }
 
+    // Local mode normally makes exactly one tool call per message — fine for
+    // "is X in stock" but not for "which is cheaper, X or Y", which needs
+    // two separate lookups plus an actual comparison, not just a dump of
+    // both books' data. Handling that class of question explicitly here.
+    function extractComparisonTitles(input) {
+      let m;
+      m = input.match(/is\s+(.+?)\s+(?:more expensive|pricier|cheaper|less expensive)\s+than\s+(.+?)[\?\.]?$/i);
+      if (m) return [m[1].trim(), m[2].trim()];
+      m = input.match(/between\s+(.+?)\s+and\s+(.+?)[,\?\.].*$/i);
+      if (m) return [m[1].trim(), m[2].trim()];
+      m = input.match(/which\s+(?:one\s+)?(?:is|has)\b[^,]*,?\s+(.+?)\s+or\s+(.+?)[\?\.]?$/i);
+      if (m) return [m[1].trim(), m[2].trim()];
+      m = input.match(/more copies of\s+(.+?)\s+or\s+(.+?)\b(?:\s+in stock)?[\?\.]?$/i);
+      if (m) return [m[1].trim(), m[2].trim()];
+      return null;
+    }
+
+    async function tryHandleComparisonQuestion(userInput) {
+      const input = userInput.toLowerCase();
+      const isComparisonShaped = /\b(cheaper|more expensive|pricier|less expensive|higher rating|higher rated|more copies|which one|between)\b/i.test(input) && (/ or | and |\bthan\b/i.test(input));
+      if (!isComparisonShaped) return null;
+
+      const titles = extractComparisonTitles(userInput);
+      if (!titles) return null;
+
+      const [rawA, rawB] = titles;
+      const cleanTitle = (t) => t.replace(/^(the|a|an)\s+/i, '').replace(/[^\w\s]/g, '').trim();
+
+      const [resA, resB] = await Promise.all([
+        executeDatabaseTool('advanced_book_search', { query: cleanTitle(rawA), limit: 1 }),
+        executeDatabaseTool('advanced_book_search', { query: cleanTitle(rawB), limit: 1 })
+      ]);
+
+      const bookA = resA.results && resA.results[0];
+      const bookB = resB.results && resB.results[0];
+
+      if (!bookA || !bookB) {
+        const missing = !bookA && !bookB ? `either "${rawA}" or "${rawB}"` : (!bookA ? `"${rawA}"` : `"${rawB}"`);
+        return {
+          text: `I couldn't find ${missing} in our catalog to compare — could you double-check the title?`,
+          toolCalled: { name: 'advanced_book_search', args: { rawA, rawB }, result: { bookA, bookB } }
+        };
+      }
+
+      let metric, verdict;
+      if (/\b(cheaper|more expensive|pricier|less expensive)\b/i.test(input)) {
+        metric = 'price';
+        const cheaper = bookA.price <= bookB.price ? bookA : bookB;
+        const pricier = cheaper === bookA ? bookB : bookA;
+        verdict = `**${cheaper.title}** ($${cheaper.price.toFixed(2)}) is cheaper than **${pricier.title}** ($${pricier.price.toFixed(2)}).`;
+      } else if (/\b(higher rating|higher rated|rating)\b/i.test(input)) {
+        metric = 'rating';
+        const higher = (bookA.rating || 0) >= (bookB.rating || 0) ? bookA : bookB;
+        const lower = higher === bookA ? bookB : bookA;
+        verdict = `**${higher.title}** has the higher rating (⭐ ${higher.rating}/5 vs ⭐ ${lower.rating}/5 for **${lower.title}**).`;
+      } else if (/\b(more copies|copies|stock)\b/i.test(input)) {
+        metric = 'stock';
+        const more = bookA.stock_quantity >= bookB.stock_quantity ? bookA : bookB;
+        const less = more === bookA ? bookB : bookA;
+        verdict = `**${more.title}** has more copies in stock (${more.stock_quantity} vs ${less.stock_quantity} for **${less.title}**).`;
+      } else if (/\b(actually buy|can i buy|buy today|available)\b/i.test(input)) {
+        metric = 'availability';
+        const aAvail = bookA.stock_quantity > 0;
+        const bAvail = bookB.stock_quantity > 0;
+        if (aAvail && bAvail) verdict = `Both **${bookA.title}** and **${bookB.title}** are currently in stock and available to buy today.`;
+        else if (aAvail) verdict = `**${bookA.title}** is in stock (${bookA.stock_quantity} copies) — **${bookB.title}** is currently out of stock.`;
+        else if (bAvail) verdict = `**${bookB.title}** is in stock (${bookB.stock_quantity} copies) — **${bookA.title}** is currently out of stock.`;
+        else verdict = `Unfortunately both **${bookA.title}** and **${bookB.title}** are currently out of stock.`;
+      } else {
+        // Fallback: just lay out both books' key facts side by side.
+        metric = 'general';
+        verdict = `Here's what I found for both:`;
+      }
+
+      const detailLine = (b) => `• **${b.title}** by ${b.author} — $${b.price.toFixed(2)}, ⭐ ${b.rating}/5, ${b.stock_quantity} in stock`;
+      const text = `${verdict}\n\n${detailLine(bookA)}\n${detailLine(bookB)}`;
+
+      return {
+        text,
+        toolCalled: { name: 'advanced_book_search (comparison)', args: { titleA: bookA.title, titleB: bookB.title, metric }, result: { bookA, bookB } }
+      };
+    }
+
+    async function tryHandleAuthorAggregation(userInput) {
+      const input = userInput.toLowerCase();
+      if (!/\b(which author|what author)\b.*\b(most books|most titles)\b/i.test(input)) return null;
+
+      const res = await executeDatabaseTool('advanced_book_search', {});
+      const books = (res.results || []);
+      const counts = {};
+      books.forEach(b => { counts[b.author] = (counts[b.author] || 0) + 1; });
+
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      if (sorted.length === 0) {
+        return { text: `I wasn't able to look up author counts right now.`, toolCalled: { name: 'advanced_book_search', args: {}, result: {} } };
+      }
+
+      const [topAuthor, topCount] = sorted[0];
+      const tied = sorted.filter(([, c]) => c === topCount).map(([a]) => a);
+      let text;
+      if (tied.length === 1) {
+        text = `**${topAuthor}** has the most titles in our store, with ${topCount} books.`;
+      } else if (tied.length <= 5) {
+        text = `A few authors are tied for the most titles in our store, each with ${topCount}: ${tied.join(', ')}.`;
+      } else {
+        text = `Every author in our store currently has the same number of titles (${topCount} each) — no single author has more than the others yet.`;
+      }
+
+      return { text, toolCalled: { name: 'advanced_book_search (author aggregation)', args: {}, result: { counts } } };
+    }
+
     async function processLocalQuery(userInput) {
+      const comparisonResult = await tryHandleComparisonQuestion(userInput);
+      if (comparisonResult) return comparisonResult;
+
+      const aggregationResult = await tryHandleAuthorAggregation(userInput);
+      if (aggregationResult) return aggregationResult;
+
       const input = userInput.toLowerCase();
       let toolName = null;
       let toolArgs = {};
@@ -948,7 +1092,7 @@
           email_or_phone: "(503) 555-0192"
         };
       } else if (
-        /\b(do you have|do you sell|do you carry|got)\b.*\b(tote|mug|journal|bookmark|card|gift|candle|pin|socks|notebook|puzzle|sticker|postcard|tumbler|notecard)\b/i.test(input)
+        /\b(do you have|do you sell|do you carry|got|is (the|this|that)|are)\b.*\b(tote|mug|journal|bookmark|card|gift|candle|pin|socks|notebook|puzzle|sticker|postcard|tumbler|notecard)\b/i.test(input)
       ) {
         // A specific "do you have/sell/carry the [item]" pattern is an
         // unambiguous product lookup — it should win even when the product
@@ -976,13 +1120,33 @@
         input.includes("happening") || input.includes("illustrator") || input.includes("meet the")
       ) {
         toolName = "get_upcoming_events";
+
+        // Only strip TRUE filler words here — NOT event-type nouns like
+        // "club", "author", "reading", "gift", "talk", "tasting". Those were
+        // being stripped before (since they're also used to *detect* this
+        // route), which meant the search query could never distinguish
+        // "Author Reading" from "Cookbook Tasting" for the same book, or
+        // "Book Club Discussion" from any other event.
         const rawEventQuery = input
-          .replace(/\b(event|events|signing|club|talk|reading|fair|tasting|workshop|story hour|author|illustrator|meet|ticket|tickets|happening|is|there|do|you|have|any|at|on|in|the|a|an|being|held|start|starts|starting|time|what|whats|whens|when|where|how|much|free|paid|price|this|coming|weekend|next|second|two|separate|scheduled|related|specific|to|about|tell|me)\b/gi, '')
+          .replace(/\b(event|events|ticket|tickets|happening|signing|is|there|do|does|you|have|any|at|on|in|the|a|an|being|held|start|starts|starting|time|what|whats|whens|when|where|how|much|this|coming|weekend|next|second|two|separate|scheduled|related|specific|to|about|tell|me|it|its|can|i|for|of|out|stock)\b/gi, '')
           .replace(/[^\w\s]/g, ' ')
           .trim();
+
+        // "Free"/"paid" and month names are structured filters, not text to
+        // search for in a title — a December event's title rarely contains
+        // the word "december". Detect them separately instead of relying on
+        // fuzzy text matching against the title/description.
+        const monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+        const mentionedMonth = monthNames.findIndex(m => input.includes(m));
+        const wantsFree = /\bfree\b/i.test(input) && !/\bfree to\b/i.test(input);
+        const wantsPaid = /\bpaid\b/i.test(input);
+        const wantsNext = /\b(next|soonest|upcoming|first)\b/.test(input) && /\b(chronologically|next event|next one|coming up)\b/i.test(input);
+
         toolArgs = {
-          limit: 25,
-          query: (meaningfulTokens(rawEventQuery).length > 0) ? rawEventQuery : undefined
+          limit: wantsNext ? 1 : 25,
+          query: (meaningfulTokens(rawEventQuery).length > 0) ? rawEventQuery : undefined,
+          month: mentionedMonth >= 0 ? (mentionedMonth + 1) : undefined,
+          free_only: wantsFree ? true : (wantsPaid ? false : undefined)
         };
       } else if (input.includes("hours") || input.includes("open") || input.includes("close") || (input.includes("time") && !input.includes("what time does"))) {
         toolName = "get_store_hours";
@@ -990,15 +1154,20 @@
         toolName = "get_return_policy";
       } else if (input.includes("reward") || input.includes("point") || input.includes("birthday") || input.includes("membership") || input.includes("discount")) {
         toolName = "get_rewards_info";
-      } else if (input.includes("genre") || input.includes("categories") || input.includes("what kinds of books")) {
+      } else if (input.includes("genres") || input.includes("categories") || input.includes("what kinds of books") || input.includes("kinds of books do you") || /\bwhat genre(s)? do you\b/i.test(input)) {
         toolName = "get_available_genres";
-      } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email")) {
+      } else if (/\babout (the store|riverside|your store|us|this store)\b/i.test(input) || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email")) {
         toolName = "get_about_store";
       } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark") || input.includes("card") || input.includes("gift") || input.includes("candle") || input.includes("pin") || input.includes("socks") || input.includes("notebook") || input.includes("puzzle") || input.includes("sticker") || input.includes("postcard") || input.includes("tumbler") || input.includes("notecard")) {
         toolName = "search_merchandise";
         const cheapestMerch = input.includes("cheapest") || input.includes("least expensive");
         const priciestMerch = input.includes("most expensive") || input.includes("priciest");
+        const merchMinPriceMatch = input.match(/(?:above|over|more than|greater than|starting at|starting from|at least|min)\s*\$?(\d+(?:\.\d+)?)/i);
+        const merchMinPrice = merchMinPriceMatch ? parseFloat(merchMinPriceMatch[1]) : undefined;
+        const merchMaxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than)\s*\$?(\d+(?:\.\d+)?)/i);
+        const merchMaxPrice = merchMaxPriceMatch ? parseFloat(merchMaxPriceMatch[1]) : undefined;
         const rawMerchQuery = input
+          .replace(/\b(under|below|less than|max|cheaper than|above|over|more than|greater than|starting at|starting from|at least|min)\s*\$?\d+(?:\.\d+)?\b/gi, '')
           .replace(/\b(cheapest|least expensive|most expensive|priciest|do you have|do you sell|what'?s|what|is|are|any|the|a|an|your|my|in|for|of|could|would|buy|get|purchase|need|want|looking|gifts?|cards?|items?|shop|store|things?|stuff)\b/gi, '')
           .replace(/[^\w\s]/g, ' ')
           .trim();
@@ -1006,13 +1175,27 @@
           query: (meaningfulTokens(rawMerchQuery).length > 0) ? rawMerchQuery : undefined,
           sort_by: cheapestMerch ? 'price_asc' : (priciestMerch ? 'price_desc' : undefined),
           limit: (cheapestMerch || priciestMerch) ? 1 : undefined,
+          max_price: merchMaxPrice,
+          min_price: merchMinPrice,
           item_type: input.includes("card") ? "Card" : undefined
         };
       } else {
         toolName = "advanced_book_search";
 
-        const maxPriceMatch = input.match(/(?:under|below|less than|max|cheaper than|\$)\s*\$?(\d+(?:\.\d+)?)/i);
-        const extractedMaxPrice = maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined;
+        // "between $X and $Y" is a genuine range — check it before the
+        // individual min/max regexes, since "between" matches neither the
+        // floor list nor the ceiling list on its own and was previously
+        // grabbing only the first number as an incorrect one-sided max.
+        const rangeMatch = input.match(/between\s*\$?(\d+(?:\.\d+)?)\s*and\s*\$?(\d+(?:\.\d+)?)/i);
+        const rangeLow = rangeMatch ? Math.min(parseFloat(rangeMatch[1]), parseFloat(rangeMatch[2])) : undefined;
+        const rangeHigh = rangeMatch ? Math.max(parseFloat(rangeMatch[1]), parseFloat(rangeMatch[2])) : undefined;
+
+        const minPriceMatch = !rangeMatch && input.match(/(?:above|over|more than|greater than|starting at|starting from|at least|min)\s*\$?(\d+(?:\.\d+)?)/i);
+        const extractedMinPrice = rangeMatch ? rangeLow : (minPriceMatch ? parseFloat(minPriceMatch[1]) : undefined);
+
+        const maxPriceMatch = !rangeMatch && (input.match(/(?:under|below|less than|max|cheaper than)\s*\$?(\d+(?:\.\d+)?)/i)
+          || (!minPriceMatch ? input.match(/\$(\d+(?:\.\d+)?)/) : null));
+        const extractedMaxPrice = rangeMatch ? rangeHigh : (maxPriceMatch ? parseFloat(maxPriceMatch[1]) : undefined);
 
         const yearBeforeMatch = input.match(/(?:before|prior to|older than|earlier than|pre-?)\s*(\d{4})/i);
         let extractedYearBefore = yearBeforeMatch ? parseInt(yearBeforeMatch[1], 10) : undefined;
@@ -1024,8 +1207,15 @@
         let extractedYearExact = (!yearBeforeMatch && !yearAfterMatch && yearExactMatch) ? parseInt(yearExactMatch[1], 10) : undefined;
 
         let extractedFormat = undefined;
-        if (input.includes("hardcover")) extractedFormat = "Hardcover";
-        else if (input.includes("softcover") || input.includes("paperback")) extractedFormat = "Softcover";
+        const mentionsHardcover = input.includes("hardcover");
+        const mentionsSoftcover = input.includes("softcover") || input.includes("paperback");
+        // "Is X hardcover or softcover?" mentions both — that's a question
+        // about which one applies, not a filter request. Only treat it as a
+        // filter when exactly one format word appears (e.g. "hardcover
+        // mysteries"), otherwise let the search find the book and show its
+        // real format instead of silently filtering it out.
+        if (mentionsHardcover && !mentionsSoftcover) extractedFormat = "Hardcover";
+        else if (mentionsSoftcover && !mentionsHardcover) extractedFormat = "Softcover";
 
         const extractedBestseller = input.includes("bestseller") || input.includes("best seller") ? true : undefined;
         const extractedStaffPick = (input.includes("staff pick") || input.includes("staff recommend") || input.includes("recommend")) ? true : undefined;
@@ -1098,6 +1288,7 @@
           query: finalQuery,
           genre: extractedGenre,
           max_price: extractedMaxPrice,
+          min_price: extractedMinPrice,
           published_year: extractedYearExact,
           published_before: extractedYearBefore,
           published_after: extractedYearAfter,
@@ -1122,13 +1313,21 @@
             window.currentSetDbReservations(prev => [...prev, dbData.reservation_details]);
           }
         }
-      } else if (toolName === "advanced_book_search") {
+      } else if (toolName === "advanced_book_search" || toolName === "search_books") {
         if (dbData.results && dbData.results.length > 0) {
-          const list = dbData.results.map(b => 
-            `• **${b.title}** by ${b.author} - $${b.price ? b.price.toFixed(2) : 'N/A'} (${b.genre}, ${b.format}, ${b.published_year}) [**${b.stock_quantity} in stock**] — ISBN: ${b.isbn}`
-          ).join("\n");
+          const list = dbData.results.map(b => {
+            const ratingStr = (typeof b.rating === 'number') ? `⭐ ${b.rating}/5` : 'Unrated';
+            const stockNote = b.stock_quantity === 0
+              ? `**Out of stock** — call us at (503) 555-0192 to ask about a special order or being notified when it's back`
+              : `**${b.stock_quantity} in stock**`;
+            const blurbLine = b.blurb ? `\n  ${b.blurb}` : '';
+            return `• **${b.title}** by ${b.author} - $${b.price ? b.price.toFixed(2) : 'N/A'} (${b.genre}, ${b.format}, published ${b.pub_date || b.published_year}) [${ratingStr}] [${stockNote}] — ISBN: ${b.isbn}${blurbLine}`;
+          }).join("\n");
           
-          responseText = `Here are matching books from our database:\n\n${list}\n\nWant to place a hold or pre-order any title? Just ask!`;
+          const ambiguityNote = dbData.results.length > 1
+            ? `\n\nI found ${dbData.results.length} possible matches — let me know which one you meant if this isn't the right one.`
+            : '';
+          responseText = `Here are matching books from our database:\n\n${list}${ambiguityNote}\n\nWant to place a hold or pre-order any title? Just ask!`;
         } else {
           responseText = `I searched our inventory using your criteria, but found no matching books. You can call us at (503) 555-0192 for custom orders.`;
         }
@@ -1150,7 +1349,12 @@
       } else if (toolName === "get_rewards_info") {
         responseText = `With our **Riverside Readers** program:\n\n• **Points:** ${dbData.reward_rule}\n• **Birthday Perk:** ${dbData.birthday_discount_rule}`;
       } else if (toolName === "get_upcoming_events") {
-        const evList = dbData.upcoming_events.map(e => `• **${e.title}**\n  📆 ${e.event_date} (${e.time})\n  ℹ️ ${e.description}`).join("\n\n");
+        const evList = dbData.upcoming_events.map(e => {
+          const priceLine = (typeof e.ticket_price === 'number')
+            ? (e.ticket_price === 0 ? '🎟️ Free' : `🎟️ $${e.ticket_price.toFixed(2)}`)
+            : '';
+          return `• **${e.title}**\n  📆 ${e.event_date} (${e.time})\n  📍 ${e.location}\n  ${priceLine}\n  ℹ️ ${e.description}`;
+        }).join("\n\n");
         responseText = `Here are our upcoming events at Riverside Books:\n\n${evList}`;
       } else if (toolName === "get_about_store") {
         responseText = `**${dbData.store_name}**\n${dbData.about_text}\n\n📍 **Address:** ${dbData.address}\n📞 **Phone:** ${dbData.phone}`;
