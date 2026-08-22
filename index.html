@@ -222,6 +222,35 @@
       return dp[m][n];
     }
 
+    // Generic filler words that survive query-cleaning regexes in practice
+    // ("how many", "do you carry", "on the shelf", "right now", "would a
+    // staff member", "u guys got"...). Filtering these HERE, inside the
+    // matcher itself, means the match quality no longer depends on every
+    // possible phrasing being anticipated upstream in cleanQuery.
+    const GENERIC_STOPWORDS = new Set([
+      'the','a','an','is','are','was','were','do','does','did','you','your','yours','i','we','us',
+      'me','my','of','in','on','at','for','with','by','to','and','or','but','how','many','much',
+      'right','now','it','its','this','that','these','those','can','could','would','should','will',
+      'shall','have','has','had','about','any','some','if','still','yet','get','got','guys','idk',
+      'thing','name','carry','shelf','sell','buy','still','just','really','also','please','thanks',
+      'yeah','yep','nah','okay','ok',
+      // Framing/filler words that survive even after a structured filter
+      // (genre, staff_pick, bestseller, published_year...) has already been
+      // pulled out of the same phrase — without this, the leftover word
+      // becomes a second, contradictory title/author requirement.
+      'anything','author','named','from','looking','title','titled','book','books',
+      'collection','collections','staff','member','members','came','come','out',
+      'kind','kinds','type','types','category','categories','recommend','recommended',
+      'recommendation','bestseller','bestsellers','seller','pick','picks','copy','copies'
+    ]);
+
+    function meaningfulTokens(text) {
+      return (text || '').toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !GENERIC_STOPWORDS.has(w));
+    }
+
     // Typo-tolerant "does this query describe this text" check. Falls back
     // to per-word fuzzy matching (allowing small typos) when a plain
     // substring match fails.
@@ -233,11 +262,23 @@
       if (t.includes(q)) return true;
 
       const textWords = t.split(/\s+/).filter(Boolean);
-      const queryWords = q.split(/\s+/).filter(w => w.length >= 3);
+      const queryWords = meaningfulTokens(q);
       if (queryWords.length === 0) return false;
 
       const matchedCount = queryWords.filter(qw =>
-        textWords.some(tw => tw.includes(qw) || qw.includes(tw) || levenshteinDistance(tw, qw) <= 2)
+        textWords.some(tw => {
+          // Guard: for short words, only allow a fuzzy/containment match if
+          // the two words are close in LENGTH too, not just edit distance.
+          // Without this, a short common word can coincidentally sit inside
+          // a longer, unrelated word ("story" is 2 edits from "history",
+          // and literally a substring of it) and produce a false match.
+          // Genuine typos ("stras" vs "stars") keep the same length, so
+          // this doesn't block real typo tolerance.
+          if (Math.abs(tw.length - qw.length) > 1 && Math.min(tw.length, qw.length) < 6) {
+            return false;
+          }
+          return tw.includes(qw) || qw.includes(tw) || levenshteinDistance(tw, qw) <= 2;
+        })
       ).length;
 
       return (matchedCount / queryWords.length) >= 0.6;
@@ -365,7 +406,8 @@
         parameters: {
           type: "OBJECT",
           properties: {
-            limit: { type: "NUMBER", description: "Maximum number of events to return" }
+            limit: { type: "NUMBER", description: "Maximum number of events to return" },
+            query: { type: "STRING", description: "Optional event name or book title keywords to narrow results, e.g. 'Local History Talk' or 'Blue Shadows'." }
           }
         }
       },
@@ -512,10 +554,14 @@
               }
 
               if (args.query && args.query.trim()) {
+                // Match against the combined title+author+genre text rather
+                // than checking each field separately. A query like "Distant
+                // Maps by Otis Pryce" splits its tokens across title AND
+                // author — checking fields independently means neither half
+                // alone clears the match threshold, so it wrongly finds
+                // nothing even though the book exists.
                 results = results.filter(b => 
-                  fuzzyTextMatch(b.title, args.query) || 
-                  fuzzyTextMatch(b.author, args.query) || 
-                  fuzzyTextMatch(b.genre, args.query)
+                  fuzzyTextMatch(`${b.title} ${b.author} ${b.genre}`, args.query)
                 );
               }
 
@@ -665,9 +711,7 @@
               });
 
               const matches = books.filter(b => 
-                fuzzyTextMatch(b.title, q) || 
-                fuzzyTextMatch(b.author, q) || 
-                fuzzyTextMatch(b.genre, q)
+                fuzzyTextMatch(`${b.title} ${b.author} ${b.genre}`, q)
               ).map(book => {
                 const inv = inventoryMap[book.book_id] || {};
                 let stockLevel = "Medium Stock";
@@ -766,11 +810,10 @@
               // the full calendar instead of just the next 5 chronologically.
               const limit = args.limit || 25;
               const events = await fetchFromSupabase('events', {
-                orderBy: { column: 'event_date', ascending: true },
-                limit: limit
+                orderBy: { column: 'event_date', ascending: true }
               });
               
-              const upcomingEvents = events.map(event => ({
+              let upcomingEvents = events.map(event => ({
                 id: event.event_id,
                 title: event.event_name,
                 event_date: event.event_date,
@@ -780,6 +823,18 @@
                 book_id: event.book_id,
                 ticket_price: event.ticket_price
               }));
+
+              if (args.query && meaningfulTokens(args.query).length > 0) {
+                const filtered = upcomingEvents.filter(e =>
+                  fuzzyTextMatch(e.title, args.query) || fuzzyTextMatch(e.description || '', args.query)
+                );
+                // Only apply the filter if it actually found something —
+                // an over-eager filter shouldn't silently empty a response
+                // that would otherwise have shown the full calendar.
+                if (filtered.length > 0) upcomingEvents = filtered;
+              }
+
+              upcomingEvents = upcomingEvents.slice(0, limit);
               
               return {
                 total_events: events.length,
@@ -808,8 +863,7 @@
               const merchandise = await fetchFromSupabase('merchandise');
               
               let items = merchandise.filter(m => 
-                !q || m.item_name.toLowerCase().includes(q) || 
-                m.item_type.toLowerCase().includes(q)
+                !q || fuzzyTextMatch(m.item_name, q) || fuzzyTextMatch(m.item_type, q)
               );
               
               if (typeof args.max_price === 'number') {
@@ -831,7 +885,7 @@
               const results = items.map(item => ({
                 id: item.item_id,
                 item_name: item.item_name,
-                category: item.item_type,
+                item_type: item.item_type,
                 price: item.price
               }));
               
@@ -885,7 +939,27 @@
           customer_name: "Valued Customer",
           email_or_phone: "(503) 555-0192"
         };
-      } else if (input.includes("hours") || input.includes("open") || input.includes("close") || input.includes("time")) {
+      } else if (input.includes("instagram") || input.includes("tiktok") || input.includes("social media") || (input.includes("website") && !input.includes("event")) || (input.includes("app") && (input.includes("order") || input.includes("store")))) {
+        toolName = "get_social_links";
+      } else if (input.includes("event") && (input.includes("book") || input.includes("stock"))) {
+        toolName = "relational_event_books";
+      } else if (
+        input.includes("event") || input.includes("signing") || input.includes("club") ||
+        input.includes("talk") || input.includes("reading") || input.includes("fair") ||
+        input.includes("tasting") || input.includes("workshop") || input.includes("story hour") ||
+        input.includes("author reading") || input.includes("author event") || input.includes("ticket") ||
+        input.includes("happening")
+      ) {
+        toolName = "get_upcoming_events";
+        const rawEventQuery = input
+          .replace(/\b(event|events|signing|club|talk|reading|fair|tasting|workshop|story hour|author|ticket|tickets|happening|is|there|do|you|have|any|at|on|in|the|a|an|being|held|start|starts|starting|time|what|whats|whens|when|where|how|much|free|paid|price|this|coming|weekend|next|second|two|separate|scheduled)\b/gi, '')
+          .replace(/[^\w\s]/g, ' ')
+          .trim();
+        toolArgs = {
+          limit: 25,
+          query: (meaningfulTokens(rawEventQuery).length > 0) ? rawEventQuery : undefined
+        };
+      } else if (input.includes("hours") || input.includes("open") || input.includes("close") || (input.includes("time") && !input.includes("what time does"))) {
         toolName = "get_store_hours";
       } else if (input.includes("return") || input.includes("exchange") || input.includes("policy") || input.includes("refund")) {
         toolName = "get_return_policy";
@@ -895,22 +969,19 @@
         toolName = "get_available_genres";
       } else if (input.includes("about") || input.includes("address") || input.includes("location") || input.includes("phone") || input.includes("email")) {
         toolName = "get_about_store";
-      } else if (input.includes("event") && (input.includes("book") || input.includes("stock"))) {
-        toolName = "relational_event_books";
-      } else if (input.includes("event") || input.includes("signing") || input.includes("club")) {
-        toolName = "get_upcoming_events";
-        toolArgs = { limit: 5 };
-      } else if (input.includes("instagram") || input.includes("tiktok") || input.includes("social media") || input.includes("website") || (input.includes("app") && (input.includes("order") || input.includes("store")))) {
-        toolName = "get_social_links";
       } else if (input.includes("tote") || input.includes("mug") || input.includes("journal") || input.includes("bookmark") || input.includes("card") || input.includes("gift")) {
         toolName = "search_merchandise";
         const cheapestMerch = input.includes("cheapest") || input.includes("least expensive");
         const priciestMerch = input.includes("most expensive") || input.includes("priciest");
+        const rawMerchQuery = input
+          .replace(/\b(cheapest|least expensive|most expensive|priciest|do you have|do you sell|what'?s|what|is|are|any|the|a|an|your|my|in|for|of|could|would|buy|get|purchase|need|want|looking|gifts?|cards?|items?|shop|store|things?|stuff)\b/gi, '')
+          .replace(/[^\w\s]/g, ' ')
+          .trim();
         toolArgs = {
-          query: input.replace(/\b(cheapest|least expensive|most expensive|priciest|do you have|do you sell|what|is|are|any|the|a|an)\b/gi, '').trim(),
+          query: (meaningfulTokens(rawMerchQuery).length > 0) ? rawMerchQuery : undefined,
           sort_by: cheapestMerch ? 'price_asc' : (priciestMerch ? 'price_desc' : undefined),
           limit: (cheapestMerch || priciestMerch) ? 1 : undefined,
-          item_type: input.includes("card") ? "Card" : (input.includes("gift") ? "Gift" : undefined)
+          item_type: input.includes("card") ? "Card" : undefined
         };
       } else {
         toolName = "advanced_book_search";
@@ -986,7 +1057,17 @@
           .replace(/[^\w\s]/g, '')
           .trim();
 
-        const finalQuery = (cleanQuery.length >= 2) ? cleanQuery : undefined;
+        const finalQuery = (meaningfulTokens(cleanQuery).length > 0) ? cleanQuery : undefined;
+
+        // If the customer named a specific book, don't let a stock-status
+        // phrase ("...in stock?") silently filter it out of the results —
+        // that turns "is Salt Maps in stock" (true answer: 0 copies) into a
+        // false-sounding "we don't have that book" instead of showing the
+        // real number. Stock-status filters only make sense for browse-type
+        // queries ("what's low on stock") where there's no specific title.
+        if (finalQuery) {
+          extractedStockStatus = undefined;
+        }
 
         toolArgs = {
           query: finalQuery,
@@ -1060,10 +1141,10 @@
         responseText = `You can find us online here:\n\n${links}`;
       } else if (toolName === "search_merchandise") {
         if (dbData.results && dbData.results.length > 0) {
-          const items = dbData.results.map(m => `• **${m.item_name}** ($${m.price ? m.price.toFixed(2) : 'N/A'}) - ${m.stock_quantity} available`).join("\n");
+          const items = dbData.results.map(m => `• **${m.item_name}** (${m.item_type}) - $${m.price ? m.price.toFixed(2) : 'N/A'}`).join("\n");
           responseText = `Here is what we found in our gift and merchandise inventory:\n\n${items}`;
         } else {
-          responseText = `We carry canvas tote bags, brass bookmarks, ceramic mugs, and hardcover reading journals!`;
+          responseText = `I couldn't find a specific match for that in our gift shop inventory — feel free to ask about a specific item, or call us at (503) 555-0192 and we can help you find something.`;
         }
       }
 
