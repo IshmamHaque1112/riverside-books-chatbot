@@ -1651,7 +1651,12 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
           });
 
           if (!response.ok) {
-            throw new Error(`API returned status ${response.status}`);
+            let detail = `status ${response.status}`;
+            try {
+              const errBody = await response.json();
+              if (errBody?.error) detail = errBody.error;
+            } catch (_) { /* body wasn't JSON, stick with status */ }
+            throw new Error(`Gemini API error (${detail})`);
           }
 
           const data = await response.json();
@@ -1755,7 +1760,7 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
               {
                 id: Date.now() + 1,
                 sender: 'bot',
-                text: `*(Notice: Automatically answered via SQLite Local Database Mode)*\n\n${fallbackReply.text}`,
+                text: `*(Notice: Gemini was unavailable — answered via local fallback mode instead. Error: ${error?.message || 'unknown error'})*\n\n${fallbackReply.text}`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 toolInfo: fallbackReply.toolCalled
               }
