@@ -23,8 +23,9 @@ module.exports = async (request, response) => {
 
     const data = await geminiResponse.json();
     if (!geminiResponse.ok) {
+      console.error('Gemini API returned an error:', geminiResponse.status, JSON.stringify(data));
       return response.status(geminiResponse.status).json({
-        error: data?.error?.message || 'Gemini request failed.'
+        error: data?.error?.message || `Gemini request failed with status ${geminiResponse.status}.`
       });
     }
 

@@ -1655,7 +1655,17 @@ CRITICAL: When a customer asks to hold, reserve, or pre-order a book (especially
             try {
               const errBody = await response.json();
               if (errBody?.error) detail = errBody.error;
-            } catch (_) { /* body wasn't JSON, stick with status */ }
+            } catch (_) {
+              // Body wasn't JSON — likely means the request never reached
+              // api/gemini.js at all (e.g. a Vercel routing 404 returns an
+              // HTML page, not our JSON error shape). Surface the raw text
+              // so that's immediately distinguishable from a real Gemini
+              // API error instead of collapsing to a bare status code.
+              try {
+                const rawText = await response.clone().text();
+                if (rawText) detail = `status ${response.status}, non-JSON response: ${rawText.slice(0, 150)}`;
+              } catch (_) { /* give up, keep the status-only fallback */ }
+            }
             throw new Error(`Gemini API error (${detail})`);
           }
 
